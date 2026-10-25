@@ -1,3 +1,5 @@
+import type { KnownSecret } from "./secret-scan.known.ts";
+
 export type SecretMatch = {
   start: number;
   end: number;
@@ -85,12 +87,34 @@ function entropyMatches(text: string, existing: readonly SecretMatch[]): SecretM
   return matches;
 }
 
-// invariant: pure — no I/O, no network call, no subprocess. Every input is a string already in memory.
-export function scanForSecrets(text: string | undefined): SecretMatch[] {
+/**
+ * why first and longest first: a value known to be a secret is certain where a signature is only likely, and a
+ * longer value that contains a shorter one must be masked whole — masking the inner one first would leave the rest
+ * of the outer one readable.
+ */
+function knownMatches(text: string, known: readonly KnownSecret[]): SecretMatch[] {
+  const matches: SecretMatch[] = [];
+  for (const secret of [...known].sort((a, b) => b.value.length - a.value.length)) {
+    let from = text.indexOf(secret.value);
+    while (from !== -1) {
+      const span = { start: from, end: from + secret.value.length };
+      if (!matches.some((existing) => overlaps(span, existing))) {
+        matches.push({ ...span, kind: `env:${secret.name}` });
+      }
+      from = text.indexOf(secret.value, span.end);
+    }
+  }
+  return matches;
+}
+
+// invariant: pure — no I/O, no network call, no subprocess. Every input is a string already in memory; the known
+// values are loaded by the caller (`secret-scan.known.ts`).
+export function scanForSecrets(text: string | undefined, known: readonly KnownSecret[] = []): SecretMatch[] {
   if (!text) {
     return [];
   }
-  const signature = signatureMatches(text);
-  const entropy = entropyMatches(text, signature);
-  return [...signature, ...entropy].sort((a, b) => a.start - b.start);
+  const fromKnown = knownMatches(text, known);
+  const signature = signatureMatches(text).filter((match) => !fromKnown.some((k) => overlaps(match, k)));
+  const entropy = entropyMatches(text, [...fromKnown, ...signature]);
+  return [...fromKnown, ...signature, ...entropy].sort((a, b) => a.start - b.start);
 }

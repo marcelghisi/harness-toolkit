@@ -80,6 +80,36 @@ async function editAddedLines(
  * why after `commentGateBeforeCommit`, before `shipGuard`: same tier — a built-in capability check, reads
  * policy, not operator-authored ([/decisions/ad-115.md](/decisions/ad-115.md)).
  */
+/**
+ * hazard: the output rail masks a secret in what the agent reads, and a write built from that reading carries the
+ * placeholder instead of the value. An `Edit` whose old text holds it fails on its own; a `Write` of the whole file
+ * would replace the real credential with the placeholder and nothing would say so
+ * ([/decisions/ad-148.md](/decisions/ad-148.md)).
+ */
+function placeholderWriteGuard(event: HarnessEvent, ctx: HandlerContext): Decision {
+  const content = event.proposedContent;
+  if (!ctx.policy.secrets.redactOutput || content === undefined || !content.includes("[REDACTED:")) {
+    return { kind: "abstain" };
+  }
+  const placeholder = coreFacade.secretScan
+    .sessionPlaceholders(event.projectDir, event.sessionKey)
+    .find((candidate) => content.includes(candidate));
+  if (placeholder === undefined) {
+    return { kind: "abstain" };
+  }
+  const target = event.filePath ?? "this file";
+  return {
+    kind: "deny",
+    reason: [
+      `This write would put ${placeholder} into ${target}. The harness masked that value in what you read; the file`,
+      "holds the real one. Change only the lines you need and leave the masked line out of the new text, or ask the",
+      "operator to make that change.",
+    ].join(" "),
+    userNote: `a write carrying the masked placeholder ${placeholder} was refused`,
+    rule: "secret-placeholder-write",
+  };
+}
+
 async function commentGateBeforeEdit(event: HarnessEvent, ctx: HandlerContext): Promise<Decision> {
   const { policy } = ctx;
   if (!policy.comments.enabled || policy.comments.onViolation !== "followup") {
@@ -403,6 +433,11 @@ export const toolBeforeHandler: Handler = async (
   if (commitGuard.kind !== "abstain") {
     recordShellDecisionIfShell(event, ctx, commitGuard);
     return commitGuard;
+  }
+
+  const placeholderGuard = placeholderWriteGuard(event, ctx);
+  if (placeholderGuard.kind !== "abstain") {
+    return placeholderGuard;
   }
 
   const editGuard = await commentGateBeforeEdit(event, ctx);

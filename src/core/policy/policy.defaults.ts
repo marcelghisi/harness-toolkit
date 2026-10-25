@@ -92,6 +92,7 @@ export const DEFAULTS: Policy = {
   },
   secrets: {
     redactOutput: true,
+    knownValues: true,
   },
   intelligence: {
     gapFeedback: true,

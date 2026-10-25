@@ -274,6 +274,7 @@ detects a condition that a config field could otherwise switch off:
 | Observation mode (measure a rail with its rule off) | Runs a rail's checker while that rail is not enforcing, so the record says whether the property held with the rule injected or without it. That is the reading that tells you a rail is unnecessary rather than merely quiet, and it is what makes deleting one a decision instead of a guess. | `observe.enabled` |
 | Operator rules (your trigger, your proof) | Turns a standing instruction into a gate. A rule names when it applies, what the harness must have observed, and what to do when it has not — so 'no pull request without a review' stops depending on the model remembering it. | `rules.enabled` |
 | Secret redaction (tool/shell output) | Masks an AWS access key, GitHub/Slack/Stripe token, PEM private-key block, JWT, or an unlabelled high-entropy string with a deterministic placeholder — the same value always yields the same placeholder within a session — instead of blocking the command that produced it. | `secrets.redactOutput` |
+| Known-value secret masking (tool/shell output) | Catches the credentials the shape-based scan misses — a short or human-chosen password, one with symbols, a passphrase, a connection-string password — with almost no false positives, because it only masks values known to be secrets. The placeholder names the variable, so the agent and the operator can see which secret leaked and where. | `secrets.knownValues` |
 
 <!-- /generated -->
 

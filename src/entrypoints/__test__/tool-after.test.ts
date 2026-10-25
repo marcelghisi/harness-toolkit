@@ -708,3 +708,47 @@ test("EFH-11: clean tool.after output with no secret-shaped content falls throug
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("a password from the project's .env is masked in a log line, under the variable's name", async () => {
+  const root = tempRoot();
+  try {
+    writeFileSync(join(root, ".env"), "DB_PASSWORD=hunter2!\n");
+    const outcome = await runHandler(
+      toolAfterHandler,
+      stdinOf(
+        claudeToolAfter(root, { tool_name: "Bash", tool_response: "INFO db connect password=hunter2!" }),
+      ),
+    );
+    assert.equal(outcome.decision.kind, "rewriteOutput");
+    if (outcome.decision.kind === "rewriteOutput") {
+      assert.match(
+        outcome.decision.output,
+        /^INFO db connect password=\[REDACTED:env:DB_PASSWORD:[0-9a-f]{8}\]$/,
+      );
+      assert.doesNotMatch(outcome.decision.output, /hunter2/);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("secrets.knownValues false stops reading .env, and the weak password passes as before", async () => {
+  const root = tempRoot();
+  try {
+    writeFileSync(join(root, ".env"), "DB_PASSWORD=hunter2!\n");
+    mkdirSync(join(root, ".tlc", "harness"), { recursive: true });
+    writeFileSync(
+      join(root, ".tlc", "harness", "config.json"),
+      JSON.stringify({ version: 1, secrets: { knownValues: false } }),
+    );
+    const outcome = await runHandler(
+      toolAfterHandler,
+      stdinOf(
+        claudeToolAfter(root, { tool_name: "Bash", tool_response: "INFO db connect password=hunter2!" }),
+      ),
+    );
+    assert.equal(outcome.decision.kind, "abstain");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

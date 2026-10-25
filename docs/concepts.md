@@ -336,6 +336,16 @@ notice that a secret was masked and must not be repeated; the raw value already 
 stated structural limit, not a silent gap. Trade-off: a synchronous regex-plus-entropy pass per output, with the
 usual false-positive/false-negative risk of that detector shape.
 
+`secrets.knownValues`, on by default, adds the values the hook can know are secrets: sensitive-named variables in
+its own environment (`*PASSWORD*`, `*SECRET*`, `*TOKEN*`, `*API_KEY*`, …, never `PWD` or a `*_PATH`/`*_URL`
+pointer) and in the project's `.env` files, plus the password inside any connection string there. Every exact
+occurrence is masked as `[REDACTED:env:<VARIABLE>:<hash>]`, so a weak or symbol-heavy password in a log line is
+caught where the shape-based scan cannot see it. Values shorter than six characters are left alone.
+
+A write carrying a placeholder this session handed out is refused (`secret-placeholder-write`): the agent read a
+masked value, and writing that text back would replace the real credential in the file. A placeholder-shaped
+string the session never produced — a test fixture, a doc — is ordinary text and passes.
+
 ## intelligence (rails)
 
 | Key | Effect |

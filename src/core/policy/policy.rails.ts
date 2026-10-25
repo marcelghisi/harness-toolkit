@@ -38,6 +38,9 @@ export function activeRails(policy: Policy): string[] {
   if (policy.intelligence.idleTurnGate) {
     rails.push("idle-turn");
   }
+  if (policy.secrets.redactOutput) {
+    rails.push("secret-placeholder-write");
+  }
   if (policy.subagents.enforceAllowlist) {
     rails.push("subagent-allowlist");
   }

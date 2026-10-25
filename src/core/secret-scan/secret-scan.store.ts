@@ -38,6 +38,17 @@ function hashOf(matchedText: string): string {
   return createHash("sha256").update(matchedText).digest("hex").slice(0, 8);
 }
 
+/**
+ * The placeholders this session has handed out, and only those.
+ *
+ * why from the store and not a pattern: a placeholder-shaped string is also a legitimate thing to write — a test
+ * fixture, a doc describing the format. Only a placeholder this session produced proves the text came from a masked
+ * read rather than from the author.
+ */
+export function sessionPlaceholders(root: string, sessionKey: string): string[] {
+  return Object.values(readStore(root)[sessionKey] ?? {});
+}
+
 // invariant: the same matchedText within the same session always resolves to the same placeholder, keyed by a
 // hash rather than the raw value.
 export function placeholderFor(root: string, sessionKey: string, matchedText: string, kind: string): string {

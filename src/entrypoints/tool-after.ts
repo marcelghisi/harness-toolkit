@@ -135,7 +135,10 @@ export const toolAfterHandler: Handler = async (event: HarnessEvent, ctx: Handle
 
   if (ctx.policy.secrets.redactOutput && event.toolOutput) {
     const output = event.toolOutput;
-    const matches = coreFacade.secretScan.scanForSecrets(output);
+    const known = ctx.policy.secrets.knownValues
+      ? coreFacade.secretScan.loadKnownSecrets(event.projectDir)
+      : [];
+    const matches = coreFacade.secretScan.scanForSecrets(output, known);
     if (matches.length > 0) {
       let masked = output;
       // why: reversed so each replacement's [start, end) offsets, computed against the original string, stay

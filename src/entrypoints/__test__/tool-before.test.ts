@@ -1418,3 +1418,57 @@ describe("comment-policy-before-ship names what it checked, AD-131", () => {
     }
   });
 });
+
+describe("a write carrying a placeholder this session masked", () => {
+  test("is refused, naming the placeholder and the file", async () => {
+    const root = tempRoot();
+    try {
+      const placeholder = coreFacade.secretScan.placeholderFor(
+        root,
+        "claude-sess-1",
+        "hunter2!",
+        "env:DB_PASSWORD",
+      );
+      const outcome = await runHandler(
+        toolBeforeHandler,
+        stdinOf(
+          claudeTool(root, {
+            tool_name: "Write",
+            tool_input: {
+              file_path: join(root, "config.ts"),
+              content: `export const pw = "${placeholder}";\n`,
+            },
+          }),
+        ),
+      );
+      assert.equal(outcome.decision.kind, "deny");
+      if (outcome.decision.kind === "deny") {
+        assert.equal(outcome.decision.rule, "secret-placeholder-write");
+        assert.ok(outcome.decision.reason.includes(placeholder));
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a placeholder-shaped string the session never produced is ordinary text, so a fixture can be written", async () => {
+    const root = tempRoot();
+    try {
+      const outcome = await runHandler(
+        toolBeforeHandler,
+        stdinOf(
+          claudeTool(root, {
+            tool_name: "Write",
+            tool_input: {
+              file_path: join(root, "golden.json"),
+              content: '{"out":"[REDACTED:github-token:abcd1234]"}',
+            },
+          }),
+        ),
+      );
+      assert.notEqual(outcome.decision.kind, "deny");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

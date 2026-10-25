@@ -1,5 +1,5 @@
 {
-  "catalogVersion": 15,
+  "catalogVersion": 16,
   "capabilities": [
     {
       "id": "grind",
@@ -445,6 +445,23 @@
       ],
       "verdict": "context",
       "inspect": "the masked placeholder itself, in the tool output \u2014 `[REDACTED:<kind>:<hash>]`",
+      "asks": [],
+      "recommend": "on"
+    },
+    {
+      "id": "secretKnownValues",
+      "configPath": "secrets.knownValues",
+      "title": "Known-value secret masking (tool/shell output)",
+      "summary": "Masks every exact occurrence of a secret value the hook knows \u2014 from its environment and the project's .env files.",
+      "benefit": "Catches the credentials the shape-based scan misses \u2014 a short or human-chosen password, one with symbols, a passphrase, a connection-string password \u2014 with almost no false positives, because it only masks values known to be secrets. The placeholder names the variable, so the agent and the operator can see which secret leaked and where.",
+      "tradeOff": "The hook reads sensitive-named environment variables and the project's .env files on every tool output; nothing is persisted but the hash of a value that was masked. A secret that lives anywhere else \u2014 a vault, a file with another name \u2014 is not known, and values shorter than six characters are not masked. Only takes effect while secret redaction is on.",
+      "defaultOn": true,
+      "sinceCatalogVersion": 16,
+      "fires": [
+        "tool.after"
+      ],
+      "verdict": "context",
+      "inspect": "the masked placeholder itself, in the tool output \u2014 `[REDACTED:env:<VARIABLE>:<hash>]`",
       "asks": [],
       "recommend": "on"
     }
