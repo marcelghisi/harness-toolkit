@@ -182,11 +182,58 @@ const IDENTIFIER = /^[A-Za-z_][\w .-]{0,63}$/;
 
 type Table = { header: Cell[]; rows: Cell[][] };
 
+const SPACED_RULE = /^\s*-+(?: +-+)+\s*$/;
+
+// why: sqlite `-column`, `psql` with an unaligned border off, and most CLI table printers align columns with spaces
+// and rule a dashed line beneath — the dash groups are the only record of where one column ends.
+function columnsOf(rule: Line): Span[] {
+  return [...rule.text.matchAll(/-+/g)].map((match) => ({
+    start: match.index ?? 0,
+    end: (match.index ?? 0) + match[0].length,
+  }));
+}
+
+function sliceColumns(line: Line, columns: readonly Span[]): Cell[] {
+  return columns.map((column, index) => {
+    const end = index + 1 < columns.length ? (columns[index + 1]?.start ?? line.text.length) : line.text.length;
+    const raw = line.text.slice(column.start, end);
+    const lead = raw.length - raw.trimStart().length;
+    const text = raw.trim();
+    return { text, start: line.start + column.start + lead, end: line.start + column.start + lead + text.length };
+  });
+}
+
+function spacedTableAt(lines: readonly Line[], index: number): { table: Table; next: number } | null {
+  const line = lines[index];
+  const rule = lines[index + 1];
+  if (!line || !rule || !SPACED_RULE.test(rule.text) || /[|,\t]/.test(line.text)) {
+    return null;
+  }
+  const columns = columnsOf(rule);
+  const header = sliceColumns(line, columns);
+  if (!header.every((cell) => IDENTIFIER.test(cell.text))) {
+    return null;
+  }
+  const rows: Cell[][] = [];
+  let cursor = index + 2;
+  for (; cursor < lines.length && (lines[cursor]?.text.trim() ?? "") !== ""; cursor += 1) {
+    const row = lines[cursor];
+    if (row) {
+      rows.push(sliceColumns(row, columns));
+    }
+  }
+  return rows.length > 0 ? { table: { header, rows }, next: cursor } : null;
+}
+
 function tableAt(lines: readonly Line[], index: number): { table: Table; next: number } | null {
   const line = lines[index];
   const after = lines[index + 1];
   if (!line || !after) {
     return null;
+  }
+  const spaced = spacedTableAt(lines, index);
+  if (spaced) {
+    return spaced;
   }
   // why: mysql frames its header between `+---+` borders and pipes every row on both sides; psql rules a dashed
   // line under an unframed header; sqlite `-header` and CSV just put the names on the first line.

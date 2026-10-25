@@ -24,6 +24,11 @@ test("psql, mysql, CSV and sqlite -header output mask the cells under a personal
   assert.deepEqual(found(mysql), [["name", "Ana"]]);
   assert.deepEqual(found("id,first_name,city\n1,Ana,Lisboa"), [["name", "Ana"]]);
   assert.deepEqual(found("id|last_name\n1|Souza"), [["name", "Souza"]]);
+  const column = `id  full_name   email\n--  ----------  -----------------\n 1  Ana Souza   ${mail}`;
+  assert.deepEqual(found(column), [
+    ["name", "Ana Souza"],
+    ["email", mail],
+  ]);
 });
 
 test("a JSON field, a key=value and a key: value are masked by their label, value only", () => {
