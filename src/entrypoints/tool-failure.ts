@@ -11,6 +11,7 @@ export const toolFailureHandler: Handler = (event: HarnessEvent, ctx: HandlerCon
     event.raw,
     ctx.policy.obs.globalSpool,
     ctx.policy.secrets.knownValues,
+    ctx.policy.pii.redactOutput,
   );
 
   coreFacade.observability.recordObs(event.projectDir, obsConfigFor(ctx.policy, OBS_CONFIG_AUDIT), {

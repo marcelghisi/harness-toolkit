@@ -289,6 +289,40 @@ export function checkRules(root: string): Check[] {
   return checks;
 }
 
+/**
+ * why a row: the personal-data template is the project's definition of what to protect, and a typo in it (an unknown
+ * pack, a regex that does not compile) silently protects less. The hook never fails on it, so doctor is where it shows.
+ */
+export function checkPiiTemplate(root: string): Check[] {
+  const policy = coreFacade.policy.loadPolicy(root);
+  if (!policy.pii.redactOutput && !policy.pii.blockWrites) {
+    return [
+      { level: "warn", name: "pii template", detail: "personal-data protection is off in this project" },
+    ];
+  }
+  const template = coreFacade.piiScan.loadPiiTemplate(root);
+  const custom = [...template.labels.values()].filter((rule) => rule.kind === "custom").length;
+  const where =
+    template.source === "file"
+      ? "pii.json"
+      : "international default (no pii.json; tlc harness pii suggest proposes one)";
+  const checks: Check[] = [
+    {
+      level: template.errors.length > 0 ? "warn" : "ok",
+      name: "pii template",
+      detail: `${where} — packs ${template.packs.join(", ")}; ${template.labels.size} field names (${custom} custom), ${template.detectors.length} value detectors`,
+    },
+  ];
+  for (const error of template.errors) {
+    checks.push({
+      level: "warn",
+      name: "pii template",
+      detail: `${error} — the rest of the template still applies`,
+    });
+  }
+  return checks;
+}
+
 export function checkRuntimePaths(home: string, platform: NodeJS.Platform): Check[] {
   const version = runtimeVersion(home);
   const launcher = join(home, "bin", "tlc-exec.mjs");
@@ -846,6 +880,7 @@ export function runChecks(ctx: DoctorContext): Check[] {
     ...checkCapabilities(ctx.root, ctx.runtimeHome),
     ...checkPrices(),
     ...checkRules(ctx.root),
+    ...checkPiiTemplate(ctx.root),
     checkGlobalCommands(ctx.home),
   ];
 }

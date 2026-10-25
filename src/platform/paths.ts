@@ -110,6 +110,11 @@ export function projectConfigPath(root: string): string {
   return join(harnessDir(root), "config.json");
 }
 
+// why: what counts as personal data is the project's to declare, reviewed like the rest of its policy.
+export function piiTemplatePath(root: string): string {
+  return join(harnessDir(root), "pii.json");
+}
+
 export function projectStateDir(root: string): string {
   return join(harnessDir(root), "state");
 }

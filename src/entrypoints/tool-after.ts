@@ -120,7 +120,9 @@ function leakSubject(
  * value; the classification names the defect, once per session and subject in the output itself, and counts it in
  * the session report for the operator ([/decisions/ad-149.md](/decisions/ad-149.md)).
  */
-function redactSecrets(event: HarnessEvent, ctx: HandlerContext): Decision | null {
+type Masked = { output: string; advice: string };
+
+function redactSecrets(event: HarnessEvent, ctx: HandlerContext): Masked | null {
   if (!ctx.policy.secrets.redactOutput || !event.toolOutput) {
     return null;
   }
@@ -150,7 +152,99 @@ function redactSecrets(event: HarnessEvent, ctx: HandlerContext): Decision | nul
   });
   const fresh = coreFacade.secretScan.adviseOnce(event.projectDir, event.sessionKey, `${cause}:${subject}`);
   const advice = fresh ? `\n\n${coreFacade.secretScan.leakAdvice(cause, kinds, subject)}` : "";
-  return { kind: "rewriteOutput", output: `${masked}${advice}` };
+  return { output: masked, advice };
+}
+
+function pseudonymise(event: HarnessEvent, text: string, matches: readonly PiiSpan[]): string {
+  const template = coreFacade.piiScan.loadPiiTemplate(event.projectDir);
+  let out = text;
+  for (const match of [...matches].reverse()) {
+    const token = coreFacade.piiScan.pseudonymFor({
+      root: event.projectDir,
+      sessionKey: event.sessionKey,
+      value: text.slice(match.start, match.end),
+      kind: match.kind,
+      mode: match.mode,
+      keep: template.keep,
+    });
+    out = `${out.slice(0, match.start)}${token}${out.slice(match.end)}`;
+  }
+  return out;
+}
+
+type PiiSpan = { start: number; end: number; kind: string; mode: "pseudonym" | "mask" };
+
+// invariant: the subject is the command with its secrets and personal values already replaced, or the path.
+function piiSubject(event: HarnessEvent, secretFree: string | undefined): string {
+  if (secretFree) {
+    const template = coreFacade.piiScan.loadPiiTemplate(event.projectDir);
+    return pseudonymise(event, secretFree, coreFacade.piiScan.scanForPii(secretFree, template)).slice(0, 80);
+  }
+  if (event.filePath) {
+    return normalizeSeparators(relative(event.projectDir, event.filePath));
+  }
+  return event.toolName ?? "tool";
+}
+
+/**
+ * why after the secret mask: a credential is never personal data worth keeping correlatable, so it is masked first
+ * and the personal-data pass runs on what is left. The same pass runs for a local container and a server, because
+ * the rows are the same rows ([/decisions/ad-151.md](/decisions/ad-151.md)).
+ */
+function redactPii(
+  event: HarnessEvent,
+  ctx: HandlerContext,
+  text: string,
+  secretFreeCommand?: string,
+): Masked | null {
+  if (!ctx.policy.pii.redactOutput || text === "") {
+    return null;
+  }
+  const template = coreFacade.piiScan.loadPiiTemplate(event.projectDir);
+  const source = coreFacade.piiScan.classifyPiiSource({
+    command: event.command,
+    toolName: event.toolName,
+    filePath: event.filePath,
+  });
+  const matches = coreFacade.piiScan.scanForPii(text, template, { fields: source !== "source-file" });
+  if (matches.length === 0) {
+    return null;
+  }
+  const subject = piiSubject(event, secretFreeCommand ?? event.command);
+  const kinds = [...new Set(matches.map((match) => match.kind))];
+  coreFacade.observability.recordObs(event.projectDir, obsConfigFor(ctx.policy, OBS_CONFIG_AUDIT), {
+    provider: event.provider,
+    kind: "pii.masked",
+    sessionKey: event.sessionKey,
+    model: event.model,
+    attrs: { source, kinds, subject, count: matches.length, event: event.event },
+  });
+  const fresh = coreFacade.secretScan.adviseOnce(
+    event.projectDir,
+    event.sessionKey,
+    `pii:${source}:${subject}`,
+  );
+  const advice = fresh ? `\n\n${coreFacade.piiScan.piiAdvice(source, kinds, subject)}` : "";
+  return { output: pseudonymise(event, text, matches), advice };
+}
+
+function redactOutput(event: HarnessEvent, ctx: HandlerContext): Decision | null {
+  if (!event.toolOutput) {
+    return null;
+  }
+  const secrets = redactSecrets(event, ctx);
+  const base = secrets?.output ?? event.toolOutput;
+  const secretFreeCommand = event.command
+    ? maskText(event, event.command, coreFacade.secretScan.scanForSecrets(event.command))
+    : undefined;
+  const pii = redactPii(event, ctx, base, secretFreeCommand);
+  if (!secrets && !pii) {
+    return null;
+  }
+  return {
+    kind: "rewriteOutput",
+    output: `${pii?.output ?? base}${secrets?.advice ?? ""}${pii?.advice ?? ""}`,
+  };
 }
 
 export const toolAfterHandler: Handler = async (event: HarnessEvent, ctx: HandlerContext) => {
@@ -165,6 +259,7 @@ export const toolAfterHandler: Handler = async (event: HarnessEvent, ctx: Handle
     event.raw,
     ctx.policy.obs.globalSpool,
     ctx.policy.secrets.knownValues,
+    ctx.policy.pii.redactOutput,
   );
 
   const kind = OBS_KIND_BY_EVENT[event.event];
@@ -211,7 +306,7 @@ export const toolAfterHandler: Handler = async (event: HarnessEvent, ctx: Handle
     });
   }
 
-  const redacted = redactSecrets(event, ctx);
+  const redacted = redactOutput(event, ctx);
   if (redacted) {
     return redacted;
   }

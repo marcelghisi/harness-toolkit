@@ -267,3 +267,14 @@ test("the refusal names every diverged path, not just the first", () => {
     assert.match(decision.reason, /config\.json/);
   }
 });
+
+// why: an out-of-band edit to the personal-data template is a policy change like any other.
+test("the personal-data template is a policy source", () => {
+  const root = mkdtempSync(join(tmpdir(), "tlc-integrity-pii-"));
+  try {
+    const paths = policySourceFingerprint(root).map((source) => source.path);
+    assert.ok(paths.includes(join(root, ".tlc", "harness", "pii.json")));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

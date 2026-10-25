@@ -41,6 +41,12 @@ export function activeRails(policy: Policy): string[] {
   if (policy.secrets.redactOutput) {
     rails.push("secret-placeholder-write");
   }
+  if (policy.pii.redactOutput) {
+    rails.push("pii-placeholder-write");
+  }
+  if (policy.pii.blockWrites) {
+    rails.push("pii-write-gate");
+  }
   if (policy.subagents.enforceAllowlist) {
     rails.push("subagent-allowlist");
   }

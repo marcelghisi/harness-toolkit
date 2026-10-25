@@ -38,6 +38,7 @@ function deepMerge(base: Policy, patch: PartialPolicy): Policy {
     planGate: { ...base.planGate, ...patch.planGate },
     shell: { ...base.shell, ...patch.shell },
     secrets: { ...base.secrets, ...patch.secrets },
+    pii: { ...base.pii, ...patch.pii },
     intelligence: {
       ...base.intelligence,
       ...patch.intelligence,

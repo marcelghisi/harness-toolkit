@@ -130,6 +130,14 @@ export type Policy = {
      */
     knownValues: boolean;
   };
+  /**
+   * why only switches here: what counts as personal data is the project's own definition, in `.tlc/harness/pii.json`,
+   * reviewed by whoever owns privacy — these decide whether the harness acts on it ([/decisions/ad-151.md](/decisions/ad-151.md)).
+   */
+  pii: {
+    redactOutput: boolean;
+    blockWrites: boolean;
+  };
   intelligence: {
     gapFeedback: boolean;
     failureClassification: boolean;
@@ -157,6 +165,7 @@ export type PartialPolicy = Partial<Policy> & {
   rules?: Partial<Policy["rules"]>;
   shell?: Partial<Policy["shell"]>;
   secrets?: Partial<Policy["secrets"]>;
+  pii?: Partial<Policy["pii"]>;
   intelligence?: Partial<Policy["intelligence"]> & {
     lessons?: Partial<LessonsPolicyConfig>;
   };

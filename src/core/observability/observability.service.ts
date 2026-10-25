@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { HarnessEvent } from "../../contracts/harness-event.ts";
+import { loadPiiTemplate } from "../pii-scan/pii-scan.template.ts";
 import { loadKnownSecrets } from "../secret-scan/secret-scan.known.ts";
 import {
   appendAuditRecord,
@@ -71,8 +72,9 @@ export function recordObs(root: string, config: ObservabilityConfig, input: Reco
   }
 
   const known = config.maskKnownValues ? loadKnownSecrets(root) : [];
+  const pii = config.maskPii ? loadPiiTemplate(root) : null;
   let attrs = truncateAttrs(
-    redactDeep(input.attrs ?? {}, known) as Record<string, unknown>,
+    redactDeep(input.attrs ?? {}, known, pii) as Record<string, unknown>,
     config.maxAttrChars,
   );
   if (!config.includePayloads) {
@@ -179,6 +181,10 @@ function updateRollup(root: string, config: ObservabilityConfig, event: ObsEvent
   }
   if (event.kind === "secret.masked") {
     recordSecretMasked(rollup, event.attrs);
+  }
+  if (event.kind === "pii.masked" || event.kind === "pii.written") {
+    const key = event.kind === "pii.written" ? "written" : String(event.attrs.source ?? "other");
+    rollup.piiBySource = addMaskedSlot(rollup.piiBySource ?? {}, key, event.attrs);
   }
   if (event.kind === "session.start" && typeof event.attrs.injected_chars === "number") {
     rollup.injected_chars = event.attrs.injected_chars;
@@ -290,13 +296,18 @@ export function recordAudit(
   payload: unknown,
   spool = false,
   maskKnownValues = false,
+  maskPii = false,
 ): void {
   appendAuditRecord(
     root,
     {
       ts: new Date().toISOString(),
       event,
-      payload: redactDeep(payload, maskKnownValues ? loadKnownSecrets(root) : []),
+      payload: redactDeep(
+        payload,
+        maskKnownValues ? loadKnownSecrets(root) : [],
+        maskPii ? loadPiiTemplate(root) : null,
+      ),
     },
     spool,
   );
@@ -333,10 +344,11 @@ export { DEFAULT_OBS };
 // invariant: a handful of distinct entries per cause is enough to point at the defect; the count carries the rest.
 const SECRET_SUBJECTS_KEPT = 5;
 
-function recordSecretMasked(rollup: SessionRollup, attrs: Record<string, unknown>): void {
-  const cause = String(attrs.cause ?? "other");
-  const byCause = rollup.secretsByCause ?? {};
-  const slot = byCause[cause] ?? { count: 0, kinds: [], subjects: [] };
+type MaskedSlots = Record<string, { count: number; kinds: string[]; subjects: string[] }>;
+
+// why: the secret and personal-data rails count the same way — by a key, with the kinds and a few subjects seen.
+function addMaskedSlot(slots: MaskedSlots, key: string, attrs: Record<string, unknown>): MaskedSlots {
+  const slot = slots[key] ?? { count: 0, kinds: [], subjects: [] };
   slot.count += 1;
   const kinds = Array.isArray(attrs.kinds) ? attrs.kinds.map(String) : [];
   slot.kinds = [...new Set([...slot.kinds, ...kinds])];
@@ -344,8 +356,11 @@ function recordSecretMasked(rollup: SessionRollup, attrs: Record<string, unknown
   if (subject !== "" && !slot.subjects.includes(subject) && slot.subjects.length < SECRET_SUBJECTS_KEPT) {
     slot.subjects.push(subject);
   }
-  byCause[cause] = slot;
-  rollup.secretsByCause = byCause;
+  return { ...slots, [key]: slot };
+}
+
+function recordSecretMasked(rollup: SessionRollup, attrs: Record<string, unknown>): void {
+  rollup.secretsByCause = addMaskedSlot(rollup.secretsByCause ?? {}, String(attrs.cause ?? "other"), attrs);
 }
 
 // invariant: what `recordRollup` branches on. Fed inline at record time, so it sees every event before plane
@@ -358,6 +373,8 @@ export const ROLLUP_KINDS = [
   "mcp.end",
   "mcp.start",
   "policy.deny",
+  "pii.masked",
+  "pii.written",
   "prompt.submit",
   "secret.masked",
   "session.start",

@@ -901,7 +901,9 @@ MEASURE
   tlc harness lessons list|show|garden|sync-rules
 
 PROJECT
-  tlc harness init --minimal | tlc harness init --write --stdin-json`.split("\n"),
+  tlc harness init --minimal | tlc harness init --write --stdin-json
+  tlc harness pii suggest          propose a personal-data template from the schema
+  tlc harness pii test <file|->    what would be pseudonymised, by line and kind`.split("\n"),
       },
     ],
     footer: "tlc harness help <topic> for a document  ·  tlc harness why to see what it decided",
@@ -1294,6 +1296,8 @@ export function route(args: string[]): Action {
     case "lessons":
     case "lesson":
       return { kind: "entry", entry: "lessons-cli", args: args.slice(1) };
+    case "pii":
+      return { kind: "entry", entry: "pii-cli", args: args.slice(1) };
     case "init":
       return { kind: "entry", entry: "init-project", args: args.slice(1) };
     case "install":
@@ -1664,7 +1668,7 @@ async function main(argv: string[]): Promise<void> {
   if (group !== "harness") {
     console.error(`unknown: ${argv[0] ?? ""}`);
     console.error(
-      "usage: tlc harness <status|doctor|help|grind|pause|resume|reset|mode|obs|prices|lessons|init|update|test|verify|build>",
+      "usage: tlc harness <status|doctor|help|grind|pause|resume|reset|mode|obs|prices|lessons|pii|init|update|test|verify|build>",
     );
     process.exit(1);
   }

@@ -1,4 +1,6 @@
 import type { HarnessEventKind } from "../../contracts/harness-event.ts";
+import { scanForPii } from "../pii-scan/pii-scan.service.ts";
+import type { CompiledPiiTemplate } from "../pii-scan/pii-scan.template.ts";
 import type { KnownSecret } from "../secret-scan/secret-scan.known.ts";
 import { scanForSecrets } from "../secret-scan/secret-scan.service.ts";
 
@@ -34,7 +36,13 @@ export type ObsKind =
   | "policy.observe"
   // why: a masked secret is a defect in the code that produced it, so it is counted where the operator looks — by
   // cause, with the variable names and never the values ([/decisions/ad-149.md](/decisions/ad-149.md)).
-  | "secret.masked";
+  | "secret.masked"
+  // why: personal data is counted by where it surfaced — a query result is expected, a log or a source file is a
+  // defect — with kinds and subjects and never a value ([/decisions/ad-151.md](/decisions/ad-151.md)).
+  | "pii.masked"
+  | "pii.written"
+  // why: turning the protection off is an operator decision, and one an auditor should be able to see was made.
+  | "pii.disabled";
 
 export type CostPool = "provider_native" | "other" | "auto" | "unknown";
 
@@ -86,6 +94,8 @@ export type ObservabilityConfig = {
   globalSpool: boolean;
   /** why: reading the hook's environment and `.env` is the operator's choice (`secrets.knownValues`), on disk too. */
   maskKnownValues?: boolean;
+  /** why: a record on disk outlives the session, so personal data is masked there whenever the rail is on. */
+  maskPii?: boolean;
 };
 
 export const DEFAULT_OBS: ObservabilityConfig = {
@@ -117,6 +127,9 @@ export const SIGNAL_KINDS = new Set<ObsKind>([
   "policy.deny",
   "policy.observe",
   "secret.masked",
+  "pii.masked",
+  "pii.written",
+  "pii.disabled",
 ]);
 
 export const LIVE_ALLOWLIST = new Set<ObsKind>([
@@ -194,25 +207,39 @@ const SECRET_VALUE = /\b(ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-
  * hazard: not by the entropy pass. Its alphabet includes `/`, so a temp path like `/var/folders/3w/43yq…` scores
  * as a secret, and the records would lose the paths and diagnostics they exist to keep.
  */
-function maskString(text: string, known: readonly KnownSecret[]): string {
+function maskString(text: string, known: readonly KnownSecret[], pii: CompiledPiiTemplate | null): string {
   let masked = text;
   for (const match of [...scanForSecrets(text, known, { entropy: false })].reverse()) {
     masked = `${masked.slice(0, match.start)}[REDACTED:${match.kind}]${masked.slice(match.end)}`;
   }
-  return masked.replace(SECRET_VALUE, "[REDACTED]");
+  masked = masked.replace(SECRET_VALUE, "[REDACTED]");
+  if (!pii) {
+    return masked;
+  }
+  // why no hash on disk: a record is read by an operator, not joined by an agent, and leaving the hash out means the
+  // writer never needs the salt.
+  let out = masked;
+  for (const match of [...scanForPii(masked, pii)].reverse()) {
+    out = `${out.slice(0, match.start)}[PII:${match.kind}]${out.slice(match.end)}`;
+  }
+  return out;
 }
 
-export function redactDeep(value: unknown, known: readonly KnownSecret[] = []): unknown {
+export function redactDeep(
+  value: unknown,
+  known: readonly KnownSecret[] = [],
+  pii: CompiledPiiTemplate | null = null,
+): unknown {
   if (typeof value === "string") {
-    return maskString(value, known);
+    return maskString(value, known, pii);
   }
   if (Array.isArray(value)) {
-    return value.map((item) => redactDeep(item, known));
+    return value.map((item) => redactDeep(item, known, pii));
   }
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = SECRET_KEY.test(key) ? "[REDACTED]" : redactDeep(nested, known);
+      out[key] = SECRET_KEY.test(key) ? "[REDACTED]" : redactDeep(nested, known, pii);
     }
     return out;
   }

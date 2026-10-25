@@ -1,0 +1,85 @@
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import { piiTemplatePath } from "../../../platform/paths.ts";
+import { DEFAULT_PACKS } from "../pii-scan.packs.ts";
+import { scanForPii } from "../pii-scan.service.ts";
+import { compilePiiTemplate, loadPiiTemplate, normalizeLabel } from "../pii-scan.template.ts";
+import { cpf, luhnComplete } from "./pii-fixtures.ts";
+
+test("field names fold case, separators, camelCase and accents to one spelling", () => {
+  for (const name of ["Customer-Email", "customer_email", "customerEmail", "CUSTOMER EMAIL"]) {
+    assert.equal(normalizeLabel(name), "customer_email", name);
+  }
+  assert.equal(normalizeLabel("endereço"), "endereco");
+});
+
+test("with no template the default is international: checksummed id packs and every language pack", () => {
+  const template = compilePiiTemplate(null);
+  assert.equal(template.source, "default");
+  assert.deepEqual(template.packs, [...DEFAULT_PACKS]);
+  assert.equal(template.labels.get("nombre")?.kind, "name");
+  assert.equal(
+    template.labels.get("ssn"),
+    undefined,
+    "a label-only document waits for the project to declare it",
+  );
+});
+
+test("extends composes jurisdictions without crossing them, and a project adds its own fields", () => {
+  const template = compilePiiTemplate({
+    extends: ["id:br", "id:us", "id:pt", "lang:pt"],
+    fields: ["numero_conta", { name: "tenant", kind: "tenant", mode: "mask" }],
+  });
+  assert.deepEqual(template.packs, ["global", "id:br", "id:us", "id:pt", "lang:pt"]);
+  assert.equal(template.labels.get("ssn")?.kind, "us-ssn");
+  assert.equal(template.labels.get("nif")?.kind, "pt-nif");
+  assert.equal(template.labels.get("numero_conta")?.kind, "custom");
+  assert.deepEqual(template.labels.get("tenant"), { kind: "tenant", mode: "mask" });
+  const doc = cpf("123456789");
+  const kinds = scanForPii(`cpf ${doc}`, template).map((match) => match.kind);
+  assert.deepEqual(kinds, ["br-cpf"]);
+});
+
+test("a custom pattern runs with the validator it names", () => {
+  const template = compilePiiTemplate({
+    patterns: [{ kind: "member", regex: "MBR-\\d{16}", validate: "luhn" }],
+  });
+  const valid = `MBR-${luhnComplete("453914880343646")}`;
+  const invalid = `MBR-${luhnComplete("453914880343646").slice(0, -1)}0`;
+  assert.deepEqual(
+    scanForPii(`${valid} ${invalid}`, template).map((match) => match.kind),
+    ["member"],
+  );
+});
+
+test("a broken template reports what is wrong and still compiles the rest", () => {
+  const template = compilePiiTemplate({
+    extends: ["id:zz"],
+    patterns: [
+      { kind: "bad", regex: "(" },
+      { kind: "unknown", regex: "x", validate: "rot13" },
+    ],
+    keep: ["email-domain", "shoe-size"],
+  });
+  assert.equal(template.errors.length, 4);
+  assert.deepEqual(template.packs, ["global"]);
+  assert.deepEqual([...template.keep], ["email-domain"]);
+});
+
+test("the template file is read from the project, and invalid JSON falls back to the defaults with an error", () => {
+  const root = mkdtempSync(join(tmpdir(), "tlc-pii-template-"));
+  try {
+    mkdirSync(join(root, ".tlc", "harness"), { recursive: true });
+    writeFileSync(piiTemplatePath(root), JSON.stringify({ extends: ["id:us"] }));
+    assert.deepEqual(loadPiiTemplate(root).packs, ["global", "id:us"]);
+    writeFileSync(piiTemplatePath(root), "{ not json");
+    const broken = loadPiiTemplate(root);
+    assert.equal(broken.source, "default");
+    assert.match(broken.errors[0] ?? "", /not valid JSON/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

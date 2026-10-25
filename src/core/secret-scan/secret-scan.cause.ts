@@ -16,9 +16,9 @@ export type LeakInput = {
 };
 
 // why: the readers that show a log, and the platforms whose `logs` subcommand prints one.
-const LOG_READERS =
+export const LOG_READERS =
   /(^|[\s;&|(])(cat|tail|head|less|more|grep|rg|awk|sed|bat|zcat)\b[^;&|]*(\.log\b|(^|[\s/])logs?\/)/;
-const LOG_COMMANDS =
+export const LOG_COMMANDS =
   /(^|[\s;&|(])(docker(\s+compose)?\s+logs|kubectl\s+logs|journalctl|pm2\s+logs|heroku\s+logs|fly\s+logs)\b/;
 const ENV_DUMPS = /(^|[\s;&|(])(env|printenv|set|export\s+-p|declare\s+-x)\s*($|[;&|)])/;
 

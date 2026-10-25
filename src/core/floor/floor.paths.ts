@@ -3,6 +3,7 @@ import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import {
   flagsDir,
   machineConfigPath,
+  piiTemplatePath,
   projectConfigPath,
   projectStateDir,
   runtimeStateDir,
@@ -65,9 +66,13 @@ export function isPolicySurface(
   }
   const target = normalizeSeparators(relative(projectDir, filePath) || filePath);
   const config = normalizeSeparators(relative(projectDir, projectConfigPath(projectDir)));
+  // why: the personal-data template decides what is masked, so loosening it is loosening policy.
+  const pii = normalizeSeparators(relative(projectDir, piiTemplatePath(projectDir)));
   const flags = normalizeSeparators(relative(projectDir, flagsDir(projectDir)));
   const state = normalizeSeparators(relative(projectDir, projectStateDir(projectDir)));
-  return target === config || target.startsWith(`${flags}/`) || target.startsWith(`${state}/`);
+  return (
+    target === config || target === pii || target.startsWith(`${flags}/`) || target.startsWith(`${state}/`)
+  );
 }
 
 const SECRET_HOME_DIRS = [".ssh", ".aws", ".kube", ".gnupg", ".docker", ".config/gh", ".config/gcloud"];
@@ -81,6 +86,8 @@ const SECRET_BASENAMES = new Set([
   "id_ecdsa",
   "id_ed25519",
   "id_rsa",
+  // why: the salt that keeps a personal-data pseudonym from being reversed by hashing a list of known values.
+  "pii-salt",
 ]);
 const SECRET_SUFFIXES = [".pem", ".p12", ".pfx"];
 // invariant: these are templates checked into repos on purpose — treating them as secrets would

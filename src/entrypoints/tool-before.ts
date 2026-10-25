@@ -110,6 +110,32 @@ function placeholderWriteGuard(event: HarnessEvent, ctx: HandlerContext): Decisi
   };
 }
 
+// why: the same defect as a secret placeholder — a pseudonym written back replaces a person's real value in the file
+// with a token, silently ([/decisions/ad-151.md](/decisions/ad-151.md)).
+function pseudonymWriteGuard(event: HarnessEvent, ctx: HandlerContext): Decision {
+  const content = event.proposedContent;
+  if (!ctx.policy.pii.redactOutput || content === undefined || !content.includes("[PII:")) {
+    return { kind: "abstain" };
+  }
+  const token = coreFacade.piiScan
+    .sessionPseudonyms(event.projectDir, event.sessionKey)
+    .find((candidate) => content.includes(candidate));
+  if (token === undefined) {
+    return { kind: "abstain" };
+  }
+  const target = event.filePath ?? "this file";
+  return {
+    kind: "deny",
+    reason: [
+      `This write would put ${token} into ${target}. The harness pseudonymised that personal value in what you read;`,
+      "the file holds the real one. Change only the lines you need and leave that line out of the new text, or ask the",
+      "operator to make that change.",
+    ].join(" "),
+    userNote: `a write carrying the pseudonym ${token} was refused`,
+    rule: "pii-placeholder-write",
+  };
+}
+
 async function commentGateBeforeEdit(event: HarnessEvent, ctx: HandlerContext): Promise<Decision> {
   const { policy } = ctx;
   if (!policy.comments.enabled || policy.comments.onViolation !== "followup") {
@@ -450,6 +476,10 @@ export const toolBeforeHandler: Handler = async (
   const placeholderGuard = placeholderWriteGuard(event, ctx);
   if (placeholderGuard.kind !== "abstain") {
     return placeholderGuard;
+  }
+  const pseudonymGuard = pseudonymWriteGuard(event, ctx);
+  if (pseudonymGuard.kind !== "abstain") {
+    return pseudonymGuard;
   }
 
   const editGuard = await commentGateBeforeEdit(event, ctx);

@@ -131,6 +131,12 @@ import {
   shouldObserve,
   unobservableRails,
 } from "./observe/observe.service.ts";
+import { piiAdvice } from "./pii-scan/pii-scan.advice.ts";
+import { scanForPii } from "./pii-scan/pii-scan.service.ts";
+import { classifyPiiSource } from "./pii-scan/pii-scan.source.ts";
+import { pseudonymFor, sessionPseudonyms } from "./pii-scan/pii-scan.store.ts";
+import { loadPiiTemplate } from "./pii-scan/pii-scan.template.ts";
+import { findAddedPii, writtenPiiFollowup } from "./pii-scan/pii-scan.written.ts";
 import { detectDeviations, detectPlan } from "./plan/plan.detect.ts";
 import { evaluatePlanGate, planVerdict } from "./plan/plan.service.ts";
 import { DEFAULTS } from "./policy/policy.defaults.ts";
@@ -570,6 +576,16 @@ export const coreFacade = {
     classifyLeak,
     leakAdvice,
     adviseOnce,
+  },
+  piiScan: {
+    loadPiiTemplate,
+    scanForPii,
+    classifyPiiSource,
+    pseudonymFor,
+    sessionPseudonyms,
+    piiAdvice,
+    findAddedPii,
+    writtenPiiFollowup,
   },
   observe: {
     shouldObserve,

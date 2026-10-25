@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import { runtimeHome, runtimeStateDir } from "../../../platform/paths.ts";
+import { guardPolicySurface } from "../../policy/policy.guard.ts";
 import { checkPolicySurface } from "../floor.policy-surface.ts";
 import { evaluateFloor } from "../floor.service.ts";
 import { tokenizeShell } from "../floor.tokenize.ts";
@@ -355,4 +356,14 @@ test("a shell keyword in front of a command does not hide the verb", () => {
 test("a loop list or an assignment that carries a policy path stays denied", () => {
   assertDenied(`for f in .tlc/harness/*; do rm $f; done`);
   assertDenied(`F=${CONFIG}; rm $F`);
+});
+
+// why: the personal-data template decides what is masked, so an agent that could edit it could unmask anything.
+test("the personal-data template is policy: an agent may read it and may not write it", () => {
+  const template = join(PROJECT, ".tlc", "harness", "pii.json");
+  assertDenied(`echo '{"extends":[]}' > ${template}`);
+  assertDenied(`sed -i 's/global//' ${template}`);
+  assertAllowed(`cat ${template}`);
+  const write = guardPolicySurface({ projectDir: PROJECT, toolName: "Write", filePath: template });
+  assert.equal(write.kind, "deny");
 });
