@@ -151,7 +151,7 @@ function redactSecrets(event: HarnessEvent, ctx: HandlerContext): Masked | null 
     attrs: { cause, kinds, subject, event: event.event },
   });
   const fresh = coreFacade.secretScan.adviseOnce(event.projectDir, event.sessionKey, `${cause}:${subject}`);
-  const advice = fresh ? `\n\n${coreFacade.secretScan.leakAdvice(cause, kinds, subject)}` : "";
+  const advice = fresh ? coreFacade.secretScan.leakAdvice(cause, kinds, subject) : "";
   return { output: masked, advice };
 }
 
@@ -224,7 +224,7 @@ function redactPii(
     event.sessionKey,
     `pii:${source}:${subject}`,
   );
-  const advice = fresh ? `\n\n${coreFacade.piiScan.piiAdvice(source, kinds, subject)}` : "";
+  const advice = fresh ? coreFacade.piiScan.piiAdvice(source, kinds, subject) : "";
   return { output: pseudonymise(event, text, matches), advice };
 }
 
@@ -241,10 +241,9 @@ function redactOutput(event: HarnessEvent, ctx: HandlerContext): Decision | null
   if (!secrets && !pii) {
     return null;
   }
-  return {
-    kind: "rewriteOutput",
-    output: `${pii?.output ?? base}${secrets?.advice ?? ""}${pii?.advice ?? ""}`,
-  };
+  const output = pii?.output ?? base;
+  const notice = [secrets?.advice, pii?.advice].filter((advice) => advice).join("\n\n");
+  return notice ? { kind: "rewriteOutput", output, notice } : { kind: "rewriteOutput", output };
 }
 
 export const toolAfterHandler: Handler = async (event: HarnessEvent, ctx: HandlerContext) => {

@@ -41,7 +41,11 @@ export function cursorRender(decision: Decision, _event: HarnessEvent): Rendered
     // `context` by the time render runs.
     case "rewriteOutput":
       return {
-        stdout: JSON.stringify({ updated_mcp_tool_output: { result_json: decision.output } }),
+        stdout: JSON.stringify({
+          updated_mcp_tool_output: {
+            result_json: decision.notice ? `${decision.output}\n\n${decision.notice}` : decision.output,
+          },
+        }),
         exitCode: 0,
       };
     default: {

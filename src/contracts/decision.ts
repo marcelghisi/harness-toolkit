@@ -12,7 +12,11 @@ export type Decision =
   | { kind: "context"; text: string; env?: Record<string, string> }
   | { kind: "continue"; text: string }
   | { kind: "rewriteInput"; input: Record<string, unknown>; reason: string }
-  | { kind: "rewriteOutput"; output: string };
+  /**
+   * why `notice` apart from `output`: a host that replaces a tool's output needs it in the tool's own shape, and an
+   * advisory appended to the text would no longer fit that shape. The provider decides where the notice goes.
+   */
+  | { kind: "rewriteOutput"; output: string; notice?: string };
 
 export type Rendered = {
   // invariant: null means write nothing; a provider whose abstain is a literal "{}" sets it explicitly.
