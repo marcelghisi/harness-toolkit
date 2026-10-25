@@ -124,6 +124,11 @@ export type Policy = {
   };
   secrets: {
     redactOutput: boolean;
+    /**
+     * why its own switch: it reads the hook's environment and the project's `.env` files, which an operator may not
+     * want touched even by a process that never shows them ([/decisions/ad-148.md](/decisions/ad-148.md)).
+     */
+    knownValues: boolean;
   };
   intelligence: {
     gapFeedback: boolean;

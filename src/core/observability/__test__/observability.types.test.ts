@@ -52,3 +52,18 @@ test("redactDeep masks a token-shaped literal embedded in free text", () => {
   assert.ok(redacted.includes("[REDACTED]"));
   assert.ok(!redacted.includes("sk-abcdefghijklmnopqrstuvwx"));
 });
+
+test("redactDeep masks known values and every output-rail signature, but leaves paths alone", () => {
+  const known = [{ name: "DB_PASSWORD", value: "Xk9#mP2$vL8@qR4!" }];
+  const redacted = redactDeep(
+    {
+      command: "mysql -pXk9#mP2$vL8@qR4! -e 'select 1'",
+      output: "aws=AKIAABCDEFGHIJKLMNOP",
+      cwd: "/var/folders/3w/43yqknr91p1dghvz9pp2xyjr0000gn/T/tlc-x",
+    },
+    known,
+  ) as Record<string, string>;
+  assert.equal(redacted.command, "mysql -p[REDACTED:env:DB_PASSWORD] -e 'select 1'");
+  assert.equal(redacted.output, "aws=[REDACTED:aws-access-key]");
+  assert.equal(redacted.cwd, "/var/folders/3w/43yqknr91p1dghvz9pp2xyjr0000gn/T/tlc-x");
+});

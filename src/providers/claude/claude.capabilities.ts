@@ -8,9 +8,10 @@ export function claudeCapabilities(): ProviderCapabilities {
     nativeLoopCounter: false,
     dedicatedShellEvent: false,
     toolInputRewrite: true,
-    // why: `updatedToolOutput` is documented on every event this adapter fires PostToolUse/PostToolUseFailure
-    // for — both of the after-events a rewrite could ever apply to.
-    toolOutputRewriteOn: ["tool.after", "tool.failure"],
+    // why: `updatedToolOutput` is documented on PostToolUse only, and PostToolUse fans out by tool name, so its Bash,
+    // MCP and edit kinds are listed beside `tool.after`. PostToolUseFailure documents `additionalContext` alone, so a
+    // failure's output is never claimed rewritable ([/decisions/ad-148.md](/decisions/ad-148.md)).
+    toolOutputRewriteOn: ["tool.after", "shell.after", "mcp.after", "edit.after"],
     contextAtToolBefore: true,
     contextAtToolAfter: true,
     // why: `Stop` accepts `hookSpecificOutput.additionalContext` for feedback that continues the turn, which is

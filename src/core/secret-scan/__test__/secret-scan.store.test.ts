@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import { projectStateDir } from "../../../platform/paths.ts";
-import { placeholderFor } from "../secret-scan.store.ts";
+import { adviseOnce, placeholderFor, sessionPlaceholders } from "../secret-scan.store.ts";
 
 const roots: string[] = [];
 
@@ -57,4 +57,20 @@ test("the raw matchedText never appears in the written store file", () => {
   placeholderFor(root, "session-a", secret, "aws-access-key");
   const written = readFileSync(join(projectStateDir(root), "secret-redaction.json"), "utf8");
   assert.doesNotMatch(written, new RegExp(secret));
+});
+
+test("sessionPlaceholders lists only the placeholders this session handed out", () => {
+  const root = newRoot();
+  const mine = placeholderFor(root, "session-a", "hunter2-dev", "env:DB_PASSWORD");
+  placeholderFor(root, "session-b", "other-secret", "env:API_TOKEN");
+  assert.deepEqual(sessionPlaceholders(root, "session-a"), [mine]);
+  assert.deepEqual(sessionPlaceholders(root, "session-none"), []);
+});
+
+test("adviseOnce answers true the first time a session meets a key, and false after", () => {
+  const root = newRoot();
+  assert.equal(adviseOnce(root, "session-a", "logged-credential:cat app.log"), true);
+  assert.equal(adviseOnce(root, "session-a", "logged-credential:cat app.log"), false);
+  assert.equal(adviseOnce(root, "session-b", "logged-credential:cat app.log"), true);
+  assert.equal(adviseOnce(root, "session-a", "hardcoded:src/config.ts"), true);
 });

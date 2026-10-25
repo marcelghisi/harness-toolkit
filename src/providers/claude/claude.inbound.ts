@@ -1,6 +1,7 @@
 import { isEffortLevel } from "../../contracts/effort.ts";
 import type { EffortLevel, HarnessEvent, HarnessEventKind } from "../../contracts/index.ts";
 import { sanitizeSegment } from "../../platform/sanitize.ts";
+import { joinStreams, shellStreams } from "./claude.tool-output.ts";
 
 export const EVENT_KIND_BY_HOOK: Record<string, HarnessEventKind> = {
   SessionStart: "session.start",
@@ -89,6 +90,23 @@ function effortFor(raw: Record<string, unknown>): EffortLevel | undefined {
   const effort = asRecord(raw.effort);
   const level = effort?.level;
   return isEffortLevel(level) ? level : undefined;
+}
+
+/**
+ * hazard: only the generic tool kinds read `tool_response`, so `shell.after` and `mcp.after` reached core with no
+ * output at all — a `cat app.log` through Bash was never scanned by the redaction rail, whatever it printed
+ * ([/decisions/ad-148.md](/decisions/ad-148.md)).
+ */
+function toolOutputOf(raw: Record<string, unknown>): string | undefined {
+  const toolOutput = raw.tool_response;
+  if (toolOutput === undefined || toolOutput === null) {
+    return undefined;
+  }
+  if (typeof toolOutput === "string") {
+    return toolOutput;
+  }
+  const shell = shellStreams(toolOutput);
+  return shell ? joinStreams(shell.stdout, shell.stderr) : JSON.stringify(toolOutput);
 }
 
 function preToolUseKind(toolName: string | undefined): HarnessEventKind {
@@ -187,6 +205,10 @@ export function claudeToEvent(raw: Record<string, unknown>): HarnessEvent | null
       if (command !== undefined) {
         event.command = command;
       }
+      const toolOutput = eventKind === "shell.after" ? toolOutputOf(raw) : undefined;
+      if (toolOutput !== undefined) {
+        event.toolOutput = toolOutput;
+      }
       break;
     }
     case "mcp.before":
@@ -196,6 +218,10 @@ export function claudeToEvent(raw: Record<string, unknown>): HarnessEvent | null
       }
       if (toolInput) {
         event.toolInput = toolInput;
+      }
+      const toolOutput = eventKind === "mcp.after" ? toolOutputOf(raw) : undefined;
+      if (toolOutput !== undefined) {
+        event.toolOutput = toolOutput;
       }
       break;
     }
@@ -224,9 +250,9 @@ export function claudeToEvent(raw: Record<string, unknown>): HarnessEvent | null
       }
       // why: an object here, unlike the two string fields Cursor uses. Serialising is the translation this layer
       // exists to do, and core reads one shape ([/decisions/ad-004.md](/decisions/ad-004.md)).
-      const toolOutput = raw.tool_response;
-      if (toolOutput !== undefined && toolOutput !== null) {
-        event.toolOutput = typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput);
+      const toolOutput = toolOutputOf(raw);
+      if (toolOutput !== undefined) {
+        event.toolOutput = toolOutput;
       }
       if (toolInput) {
         event.toolInput = toolInput;

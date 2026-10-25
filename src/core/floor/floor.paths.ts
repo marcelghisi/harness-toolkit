@@ -87,7 +87,7 @@ const SECRET_SUFFIXES = [".pem", ".p12", ".pfx"];
 // block ordinary work and teach the operator to distrust the floor.
 const ENV_TEMPLATE_SUFFIXES = [".example", ".sample", ".template", ".dist"];
 
-function isEnvFile(name: string): boolean {
+export function isEnvFile(name: string): boolean {
   if (name !== ".env" && !name.startsWith(".env.")) {
     return false;
   }

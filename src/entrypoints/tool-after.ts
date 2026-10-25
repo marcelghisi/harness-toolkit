@@ -81,13 +81,96 @@ async function commentEditAdvisory(event: HarnessEvent, ctx: HandlerContext): Pr
   return { kind: "context", text: coreFacade.commentPolicy.commentEditAdvisory(hits, policy.comments.mode) };
 }
 
+function maskText(
+  event: HarnessEvent,
+  text: string,
+  matches: readonly { start: number; end: number; kind: string }[],
+): string {
+  let masked = text;
+  // why: reversed so each replacement's [start, end) offsets, computed against the original string, stay
+  // valid as the string's length changes underneath earlier ones.
+  for (const match of [...matches].reverse()) {
+    const placeholder = coreFacade.secretScan.placeholderFor(
+      event.projectDir,
+      event.sessionKey,
+      text.slice(match.start, match.end),
+      match.kind,
+    );
+    masked = `${masked.slice(0, match.start)}${placeholder}${masked.slice(match.end)}`;
+  }
+  return masked;
+}
+
+// invariant: the subject is the command with its own secrets masked, or the path — never a raw value.
+function leakSubject(
+  event: HarnessEvent,
+  commandMatches: readonly { start: number; end: number; kind: string }[],
+): string {
+  if (event.command) {
+    return maskText(event, event.command, commandMatches).slice(0, 80);
+  }
+  if (event.filePath) {
+    return normalizeSeparators(relative(event.projectDir, event.filePath));
+  }
+  return event.toolName ?? "tool";
+}
+
+/**
+ * why the cause and not only the mask: a secret in an output is a defect in whatever printed it. The mask hides the
+ * value; the classification names the defect, once per session and subject in the output itself, and counts it in
+ * the session report for the operator ([/decisions/ad-149.md](/decisions/ad-149.md)).
+ */
+function redactSecrets(event: HarnessEvent, ctx: HandlerContext): Decision | null {
+  if (!ctx.policy.secrets.redactOutput || !event.toolOutput) {
+    return null;
+  }
+  const output = event.toolOutput;
+  const known = ctx.policy.secrets.knownValues
+    ? coreFacade.secretScan.loadKnownSecrets(event.projectDir)
+    : [];
+  const matches = coreFacade.secretScan.scanForSecrets(output, known);
+  if (matches.length === 0) {
+    return null;
+  }
+  const masked = maskText(event, output, matches);
+  const commandMatches = event.command ? coreFacade.secretScan.scanForSecrets(event.command, known) : [];
+  const cause = coreFacade.secretScan.classifyLeak({
+    command: event.command,
+    filePath: event.filePath,
+    commandCarriesSecret: commandMatches.length > 0,
+  });
+  const subject = leakSubject(event, commandMatches);
+  const kinds = [...new Set(matches.map((match) => match.kind))];
+  coreFacade.observability.recordObs(event.projectDir, obsConfigFor(ctx.policy, OBS_CONFIG_AUDIT), {
+    provider: event.provider,
+    kind: "secret.masked",
+    sessionKey: event.sessionKey,
+    model: event.model,
+    attrs: { cause, kinds, subject, event: event.event },
+  });
+  const fresh = coreFacade.secretScan.adviseOnce(event.projectDir, event.sessionKey, `${cause}:${subject}`);
+  return fresh
+    ? {
+        kind: "rewriteOutput",
+        output: masked,
+        notice: coreFacade.secretScan.leakAdvice(cause, kinds, subject),
+      }
+    : { kind: "rewriteOutput", output: masked };
+}
+
 export const toolAfterHandler: Handler = async (event: HarnessEvent, ctx: HandlerContext) => {
   // why here and not at `*.before`: arriving on an after-event is what says the tool ran and did not fail. A
   // failure comes as `tool.failure`, a different event this rail never sees, and the payload carries no exit code
   // in any of the three shapes the two hosts send ([/decisions/ad-100.md](/decisions/ad-100.md)).
   await observeForRules(event, ctx);
 
-  coreFacade.observability.recordAudit(event.projectDir, event.event, event.raw, ctx.policy.obs.globalSpool);
+  coreFacade.observability.recordAudit(
+    event.projectDir,
+    event.event,
+    event.raw,
+    ctx.policy.obs.globalSpool,
+    ctx.policy.secrets.knownValues,
+  );
 
   const kind = OBS_KIND_BY_EVENT[event.event];
   if (kind) {
@@ -133,24 +216,9 @@ export const toolAfterHandler: Handler = async (event: HarnessEvent, ctx: Handle
     });
   }
 
-  if (ctx.policy.secrets.redactOutput && event.toolOutput) {
-    const output = event.toolOutput;
-    const matches = coreFacade.secretScan.scanForSecrets(output);
-    if (matches.length > 0) {
-      let masked = output;
-      // why: reversed so each replacement's [start, end) offsets, computed against the original string, stay
-      // valid as the string's length changes underneath earlier ones.
-      for (const match of [...matches].reverse()) {
-        const placeholder = coreFacade.secretScan.placeholderFor(
-          event.projectDir,
-          event.sessionKey,
-          output.slice(match.start, match.end),
-          match.kind,
-        );
-        masked = `${masked.slice(0, match.start)}${placeholder}${masked.slice(match.end)}`;
-      }
-      return { kind: "rewriteOutput", output: masked };
-    }
+  const redacted = redactSecrets(event, ctx);
+  if (redacted) {
+    return redacted;
   }
 
   const untrustedDecision = coreFacade.untrusted.evaluateUntrustedContent({

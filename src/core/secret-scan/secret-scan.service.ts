@@ -1,3 +1,5 @@
+import type { KnownSecret } from "./secret-scan.known.ts";
+
 export type SecretMatch = {
   start: number;
   end: number;
@@ -11,9 +13,77 @@ export const SIGNATURES: Record<string, RegExp> = {
   "github-token": /\bgh[pousr]_[A-Za-z0-9]{36}\b/g,
   "slack-token": /\bxox[baprs]-[0-9A-Za-z-]{10,72}\b/g,
   "stripe-key": /\bsk_(?:live|test)_[A-Za-z0-9]{24,}\b/g,
-  "pem-private-key": /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+  // hazard: `grep -n` or `head` can print the BEGIN line and the body without the END, and a block that had to be
+  // terminated to match let the body through. An unterminated block masks the base64 lines that follow it, with or
+  // without a `file:line:` prefix.
+  "pem-private-key":
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|(?:\r?\n(?:[\w./-]*:)?(?:\d+[:-])?[A-Za-z0-9+/]{16,}={0,2})*)/g,
   jwt: /\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\b/g,
 };
+
+/**
+ * hazard: a human-chosen password is low-entropy and has no provider shape, so `db_password=hunter2` and
+ * `postgresql://app:hunter2@db/app` passed through unmasked while every provider key beside them was caught —
+ * measured on a fixture set built to probe exactly this.
+ *
+ * invariant: only the value is masked, never the key or the host, so the agent still sees which field held a
+ * secret. A bare `key=value` must sit flush against its `=`: `password = readPassword()` is code, not a leak.
+ */
+const ASSIGNMENT_KEY =
+  "[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|auth[_-]?key|private[_-]?key|encryption[_-]?key|signing[_-]?key|master[_-]?key|hmac[_-]?key|session[_-]?key|client[_-]?key)[A-Za-z0-9_.-]*";
+const QUOTED_ASSIGNMENT = new RegExp(
+  String.raw`(?<![A-Za-z0-9_])${ASSIGNMENT_KEY}["']?\s*[:=]\s*(["'])(?<value>[^"'\n]+)\1`,
+  "gid",
+);
+const FLUSH_ASSIGNMENT = new RegExp(
+  String.raw`(?<![A-Za-z0-9_])${ASSIGNMENT_KEY}=(?<value>[^\s"'&;,]+)`,
+  "gid",
+);
+const URL_CREDENTIAL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:(?<value>[^\s@/]+)@/dgi;
+
+/**
+ * hazard: `Authorization: Bearer <token>` names no password key and separates with an unquoted `:`, so a short or
+ * repetitive token passed unmasked while the provider keys beside it were caught — measured on a fixture log.
+ *
+ * invariant: the scheme stays visible and only the credential is masked, so the agent still sees how a request
+ * authenticated.
+ */
+const AUTH_SCHEME = /\b(?:Bearer|Basic|Token|Digest)\s+(?<value>[A-Za-z0-9._~+/=-]{8,})/dg;
+const AUTH_HEADER = /\b(?:x-api-key|x-auth-token|api-key|x-access-token)\s*:\s*(?<value>[^\s"',;]{8,})/dgi;
+
+// why: `${DATABASE_PASSWORD}`, `[REDACTED]`, `********` and `<removed>` are what a careful log already prints in
+// place of a secret. Masking them again would turn a negative control into a false positive.
+const PLACEHOLDER = /^(?:\$|<|\[|\*|%|\{|=)|^(?:null|none|undefined|true|false|redacted|changeme|xxx+)$/i;
+
+function isPlaceholder(value: string): boolean {
+  return PLACEHOLDER.test(value) || new Set(value).size === 1;
+}
+
+const ASSIGNMENT_PATTERNS: [string, RegExp][] = [
+  ["password-assignment", QUOTED_ASSIGNMENT],
+  ["password-assignment", FLUSH_ASSIGNMENT],
+  ["url-credential", URL_CREDENTIAL],
+  ["auth-header", AUTH_SCHEME],
+  ["auth-header", AUTH_HEADER],
+];
+
+function assignmentMatches(text: string, existing: readonly SecretMatch[]): SecretMatch[] {
+  const matches: SecretMatch[] = [];
+  for (const [kind, pattern] of ASSIGNMENT_PATTERNS) {
+    for (const match of text.matchAll(new RegExp(pattern.source, pattern.flags))) {
+      const span = match.indices?.groups?.value;
+      const value = match.groups?.value;
+      if (!span || value === undefined || isPlaceholder(value)) {
+        continue;
+      }
+      const found = { start: span[0], end: span[1], kind };
+      if (![...existing, ...matches].some((other) => overlaps(found, other))) {
+        matches.push(found);
+      }
+    }
+  }
+  return matches;
+}
 
 // why: a run of the base64/hex/token alphabet, long enough to be worth an entropy check at all. Excluding `-` keeps
 // a dash-separated UUID out of this pattern entirely — each of its five segments is shorter than the minimum length
@@ -71,26 +141,59 @@ function entropyMatches(text: string, existing: readonly SecretMatch[]): SecretM
     if (match.index === undefined) {
       continue;
     }
-    const span = { start: match.index, end: match.index + match[0].length };
+    // hazard: `_` and `=` are in the token alphabet, so `ENCRYPTION_KEY=<value>` was one token and the key name was
+    // masked with it — the line stopped being a KEY=value, and the same value hashed to a different placeholder
+    // than where it matched alone.
+    const name = /^[A-Za-z_][A-Za-z0-9_]*=/.exec(match[0])?.[0] ?? "";
+    const value = match[0].slice(name.length);
+    const span = { start: match.index + name.length, end: match.index + match[0].length };
     if (existing.some((existingMatch) => overlaps(span, existingMatch))) {
       continue;
     }
     if (span.end - span.start < ENTROPY_MIN_LENGTH) {
       continue;
     }
-    if (shannonEntropy(match[0]) > ENTROPY_THRESHOLD) {
+    if (shannonEntropy(value) > ENTROPY_THRESHOLD) {
       matches.push({ ...span, kind: "entropy" });
     }
   }
   return matches;
 }
 
-// invariant: pure — no I/O, no network call, no subprocess. Every input is a string already in memory.
-export function scanForSecrets(text: string | undefined): SecretMatch[] {
+/**
+ * why first and longest first: a value known to be a secret is certain where a signature is only likely, and a
+ * longer value that contains a shorter one must be masked whole — masking the inner one first would leave the rest
+ * of the outer one readable.
+ */
+function knownMatches(text: string, known: readonly KnownSecret[]): SecretMatch[] {
+  const matches: SecretMatch[] = [];
+  for (const secret of [...known].sort((a, b) => b.value.length - a.value.length)) {
+    let from = text.indexOf(secret.value);
+    while (from !== -1) {
+      const span = { start: from, end: from + secret.value.length };
+      if (!matches.some((existing) => overlaps(span, existing))) {
+        matches.push({ ...span, kind: `env:${secret.name}` });
+      }
+      from = text.indexOf(secret.value, span.end);
+    }
+  }
+  return matches;
+}
+
+// invariant: pure — no I/O, no network call, no subprocess. Every input is a string already in memory; the known
+// values are loaded by the caller (`secret-scan.known.ts`).
+export function scanForSecrets(
+  text: string | undefined,
+  known: readonly KnownSecret[] = [],
+  options: { entropy?: boolean } = {},
+): SecretMatch[] {
   if (!text) {
     return [];
   }
-  const signature = signatureMatches(text);
-  const entropy = entropyMatches(text, signature);
-  return [...signature, ...entropy].sort((a, b) => a.start - b.start);
+  const fromKnown = knownMatches(text, known);
+  const signature = signatureMatches(text).filter((match) => !fromKnown.some((k) => overlaps(match, k)));
+  const assignment = assignmentMatches(text, [...fromKnown, ...signature]);
+  const found = [...fromKnown, ...signature, ...assignment];
+  const entropy = options.entropy === false ? [] : entropyMatches(text, found);
+  return [...found, ...entropy].sort((a, b) => a.start - b.start);
 }

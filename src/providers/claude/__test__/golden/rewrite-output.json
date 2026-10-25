@@ -1,1 +1,1 @@
-{"updatedToolOutput":"AWS creds: [REDACTED:aws-access-key:a1b2c3d4]"}
+{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":"AWS creds: [REDACTED:aws-access-key:a1b2c3d4]","additionalContext":"[SECRET-HYGIENE other] advice"}}

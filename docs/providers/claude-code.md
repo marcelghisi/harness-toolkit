@@ -29,7 +29,7 @@ Source: `src/providers/claude/`.
 | `nativeLoopCounter` | `false` |
 | `dedicatedShellEvent` | `false` |
 | `toolInputRewrite` | `true` |
-| `toolOutputRewriteOn` | `["tool.after","tool.failure"]` |
+| `toolOutputRewriteOn` | `["tool.after","shell.after","mcp.after","edit.after"]` |
 | `contextAtToolBefore` | `true` |
 | `contextAtToolAfter` | `true` |
 | `contextAtStop` | `true` |
@@ -44,8 +44,11 @@ Source: `src/providers/claude/`.
 `askSupportedOn` includes `tool.before`, unlike Cursor (see [/decisions/ad-009.md](/decisions/ad-009.md), note).
 `nativeLoopCounter` is `false` because `Stop` carries no loop counter — `core/turn` supplies it instead (see
 [/decisions/ad-014.md](/decisions/ad-014.md)). `dedicatedShellEvent` is `false` because shell is
-`PreToolUse`/`PostToolUse` with `tool_name: "Bash"`. `toolOutputRewriteOn` covers `tool.after`/`tool.failure`
-because `updatedToolOutput` is documented on every `PostToolUse`/`PostToolUseFailure` event this adapter fires.
+`PreToolUse`/`PostToolUse` with `tool_name: "Bash"`. `toolOutputRewriteOn` covers the `PostToolUse` kinds
+(`tool.after`, `shell.after`, `mcp.after`, `edit.after`) and not `tool.failure`: the hooks reference documents
+`hookSpecificOutput.updatedToolOutput` on `PostToolUse` only, in the tool's own output shape, and a value that does
+not match that shape is ignored. Bash's `{stdout, stderr, interrupted, isImage}` is rebuilt from the masked text
+(`claude.tool-output.ts`); an object shape the adapter cannot rebuild gets an `additionalContext` warning instead.
 `contextAtStop` is `true` because `Stop` accepts `hookSpecificOutput.additionalContext` for feedback that
 continues the turn. `sessionStartContextReliable` is `true` because `SessionStart` delivers
 `hookSpecificOutput.additionalContext`, capped at 10,000 characters. `usageInPayload` is `false` — cost comes

@@ -1,6 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { HarnessEvent } from "../../contracts/harness-event.ts";
-import { appendAuditRecord, appendObsRecord, loadRollup, saveRollup } from "./observability.store.ts";
+import { loadKnownSecrets } from "../secret-scan/secret-scan.known.ts";
+import {
+  appendAuditRecord,
+  appendObsRecord,
+  loadRollup,
+  type SessionRollup,
+  saveRollup,
+} from "./observability.store.ts";
 import {
   DEFAULT_OBS,
   EVENT_KIND_TO_OBS_KIND,
@@ -63,7 +70,11 @@ export function recordObs(root: string, config: ObservabilityConfig, input: Reco
     return null;
   }
 
-  let attrs = truncateAttrs(redactDeep(input.attrs ?? {}) as Record<string, unknown>, config.maxAttrChars);
+  const known = config.maskKnownValues ? loadKnownSecrets(root) : [];
+  let attrs = truncateAttrs(
+    redactDeep(input.attrs ?? {}, known) as Record<string, unknown>,
+    config.maxAttrChars,
+  );
   if (!config.includePayloads) {
     attrs = stripPayloads(attrs);
   }
@@ -165,6 +176,9 @@ function updateRollup(root: string, config: ObservabilityConfig, event: ObsEvent
   }
   if (event.kind === "policy.deny") {
     rollup.denials += 1;
+  }
+  if (event.kind === "secret.masked") {
+    recordSecretMasked(rollup, event.attrs);
   }
   if (event.kind === "session.start" && typeof event.attrs.injected_chars === "number") {
     rollup.injected_chars = event.attrs.injected_chars;
@@ -270,13 +284,19 @@ function updateRollup(root: string, config: ObservabilityConfig, event: ObsEvent
   saveRollup(root, rollup);
 }
 
-export function recordAudit(root: string, event: string, payload: unknown, spool = false): void {
+export function recordAudit(
+  root: string,
+  event: string,
+  payload: unknown,
+  spool = false,
+  maskKnownValues = false,
+): void {
   appendAuditRecord(
     root,
     {
       ts: new Date().toISOString(),
       event,
-      payload: redactDeep(payload),
+      payload: redactDeep(payload, maskKnownValues ? loadKnownSecrets(root) : []),
     },
     spool,
   );
@@ -310,6 +330,24 @@ export function recordFromEvent(
 
 export { DEFAULT_OBS };
 
+// invariant: a handful of distinct entries per cause is enough to point at the defect; the count carries the rest.
+const SECRET_SUBJECTS_KEPT = 5;
+
+function recordSecretMasked(rollup: SessionRollup, attrs: Record<string, unknown>): void {
+  const cause = String(attrs.cause ?? "other");
+  const byCause = rollup.secretsByCause ?? {};
+  const slot = byCause[cause] ?? { count: 0, kinds: [], subjects: [] };
+  slot.count += 1;
+  const kinds = Array.isArray(attrs.kinds) ? attrs.kinds.map(String) : [];
+  slot.kinds = [...new Set([...slot.kinds, ...kinds])];
+  const subject = typeof attrs.subject === "string" ? attrs.subject : "";
+  if (subject !== "" && !slot.subjects.includes(subject) && slot.subjects.length < SECRET_SUBJECTS_KEPT) {
+    slot.subjects.push(subject);
+  }
+  byCause[cause] = slot;
+  rollup.secretsByCause = byCause;
+}
+
 // invariant: what `recordRollup` branches on. Fed inline at record time, so it sees every event before plane
 // routing — which is why the contract marks it `inline` rather than naming planes.
 export const ROLLUP_KINDS = [
@@ -321,6 +359,7 @@ export const ROLLUP_KINDS = [
   "mcp.start",
   "policy.deny",
   "prompt.submit",
+  "secret.masked",
   "session.start",
   "shell.end",
   "shell.start",

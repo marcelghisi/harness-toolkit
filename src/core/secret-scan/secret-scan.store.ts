@@ -38,6 +38,17 @@ function hashOf(matchedText: string): string {
   return createHash("sha256").update(matchedText).digest("hex").slice(0, 8);
 }
 
+/**
+ * The placeholders this session has handed out, and only those.
+ *
+ * why from the store and not a pattern: a placeholder-shaped string is also a legitimate thing to write — a test
+ * fixture, a doc describing the format. Only a placeholder this session produced proves the text came from a masked
+ * read rather than from the author.
+ */
+export function sessionPlaceholders(root: string, sessionKey: string): string[] {
+  return Object.values(readStore(root)[sessionKey] ?? {});
+}
+
 // invariant: the same matchedText within the same session always resolves to the same placeholder, keyed by a
 // hash rather than the raw value.
 export function placeholderFor(root: string, sessionKey: string, matchedText: string, kind: string): string {
@@ -53,4 +64,34 @@ export function placeholderFor(root: string, sessionKey: string, matchedText: st
   store[sessionKey] = session;
   writeStore(root, store);
   return placeholder;
+}
+
+function advisedPath(root: string): string {
+  return join(projectStateDir(root), "secret-advised.json");
+}
+
+/**
+ * why once: the same log read twice in a turn, or the same file opened again, is the same defect. Repeating the
+ * advice would spend context on what the agent was already told, which is how advice turns into noise.
+ *
+ * invariant: the key names a cause and a subject — a command or a path — never a value.
+ */
+export function adviseOnce(root: string, sessionKey: string, key: string): boolean {
+  const path = advisedPath(root);
+  let store: Record<string, string[]> = {};
+  if (existsSync(path)) {
+    try {
+      store = JSON.parse(readFileSync(path, "utf8")) as Record<string, string[]>;
+    } catch {}
+  }
+  const seen = store[sessionKey] ?? [];
+  if (seen.includes(key)) {
+    return false;
+  }
+  store[sessionKey] = [...seen, key];
+  try {
+    mkdirSync(projectStateDir(root), { recursive: true });
+    writeFileSync(path, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+  } catch {}
+  return true;
 }

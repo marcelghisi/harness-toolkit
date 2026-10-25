@@ -92,9 +92,9 @@ Three tiers, and which tier a check is in decides whether you can turn it off.
 |------|-------|--------------|------|
 | [Floor](#tier-1--the-floor-no-configuration-reaches-it) | 8 rules | Never | Before any policy is loaded, on every tool call, shell command and read |
 | [Always on](#tier-2--always-on-no-switch) | 3 checks | Never | After the floor, on every acting event |
-| [Rails](#tier-3--the-rails-you-choose) | 25 capabilities | Each one, individually | Where the table says |
+| [Rails](#tier-3--the-rails-you-choose) | 26 capabilities | Each one, individually | Where the table says |
 
-Nothing else runs. If a message on your screen is not from one of the thirty-six rows below, it is not the
+Nothing else runs. If a message on your screen is not from one of the thirty-seven rows below, it is not the
 harness.
 
 ### Tier 1 — the floor, no configuration reaches it
@@ -108,7 +108,7 @@ prints `rule=<name>`, and the name is the first column here.
 |---|---|---|
 | `outside-project-destruction` | a destructive command whose target resolves outside the repository and outside the OS temp directory | the same command inside the repository, or inside the temp directory |
 | `unprovable-destruction` | a destructive verb whose target is a variable, a command substitution, or otherwise built at runtime — the harness cannot see what it would delete | a literal path it can resolve and check |
-| `secret-access` | a read that would copy a credential into the transcript — `.env`, `~/.ssh`, `~/.aws`, `*.pem` and similar through a shell reader or the editor's own read tool, and the instance metadata service through any verb that speaks to the network | searching local files for the literal address, because `grep` and its kin make no request |
+| `secret-access` | a read that would copy a credential into the transcript — `.env`, `~/.ssh`, `~/.aws`, `*.pem` and similar through any verb that prints a file (`cat`, `grep`, `sed`, `awk`, `jq`, …), an inline `python -c`/`node -e`/`bash -c` or awk program that names one, a `<` redirect or `$(…)` substitution, `git show`/`diff`/`log -p`, a copy under an ordinary name, the editor's read and search tools, or a read that names no path; a command whose job is to print a stored secret (`op read`, `vault kv get`, `kubectl get secret -o`, `gh auth token`, …); and the instance metadata service through any verb that speaks to the network | a pattern, script or recursive search that names no secret file (`grep -rn PASSWORD src`), the same tools' harmless subcommands (`op signin`, `kubectl get secrets`), and searching local files for the metadata address |
 | `history-rewrite` | `git push --force` | `--force-with-lease`, which refuses on its own when the remote moved |
 | `machine-control` | `shutdown`, `reboot`, `halt`, `poweroff` | — |
 | `unprovable-execution` | a program fetched over the network and handed to a shell — piped, process-substituted, or inside a shell's `-c`/`eval` substitution. The gate cannot read what would run | a fetch with no shell downstream, and a shell fed a local file the gate can read |
@@ -137,7 +137,7 @@ otherwise switch off.
 
 ### Tier 3 — the rails you choose
 
-All 24 are off unless the **default** column says `on`, and each was presented with its benefit and its
+All 26 are off unless the **default** column says `on`, and each was presented with its benefit and its
 trade-off when you ran the init wizard. `configPath` is the key in `.tlc/harness/config.json`.
 
 <!-- generated:validates -->
@@ -169,6 +169,7 @@ trade-off when you ran the init wizard. `configPath` is the key in `.tlc/harness
 | **Observation mode (measure a rail with its rule off)**<br>`observe.enabled` · off | Runs a rail's checker while that rail is not enforcing, and records the reading without acting on it. | `stop`<br>`session.end` | `record` | tlc harness obs report — the observation readings, held apart from the refusal counters so those stay honest |
 | **Operator rules (your trigger, your proof)**<br>`rules.enabled` · off | Reads the rules you declare in markdown and enforces them: on this trigger, this must have happened. | `tool.before`<br>`stop` | `deny` | tlc harness doctor — each active rule, its tier, and any proof kind never observed here |
 | **Secret redaction (tool/shell output)**<br>`secrets.redactOutput` · **on** | Scans a tool's or shell command's output for a secret-shaped signature or high-entropy span and masks it. | `tool.after` | `context` | the masked placeholder itself, in the tool output — `[REDACTED:<kind>:<hash>]` |
+| **Known-value secret masking (tool/shell output)**<br>`secrets.knownValues` · **on** | Masks every exact occurrence of a secret value the hook knows — from its environment and the project's .env files. | `tool.after` | `context` | the masked placeholder itself, in the tool output — `[REDACTED:env:<VARIABLE>:<hash>]` |
 
 <!-- /generated -->
 

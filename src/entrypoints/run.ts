@@ -5,6 +5,7 @@ import { coreFacade, type Policy } from "../core/index.ts";
 import { appendRecord } from "../platform/fs-jsonl.ts";
 import { projectStateDir } from "../platform/paths.ts";
 import { readStdinText } from "../platform/process.ts";
+import { ensureStateIgnored } from "../platform/state-dir.ts";
 import {
   degrade,
   type ProviderPort,
@@ -218,6 +219,7 @@ export async function runHandler(
     return { event: null, decision: { kind: "abstain" }, rendered: abstainRendered };
   }
 
+  ensureStateIgnored(event.projectDir);
   const capabilities = provider.capabilities();
   if (isPausedSafely(event)) {
     const decision = degrade(pausedDecision(event, whilePaused), event, capabilities, {

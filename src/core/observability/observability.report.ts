@@ -153,6 +153,32 @@ function gateDetail(rollup: SessionRollup): string {
  * multiplication visible: the gate cost is paid once per attempt, so six runs of a four-minute suite is the answer
  * and no amount of hook tuning would have changed it ([/decisions/ad-033.md](/decisions/ad-033.md)).
  */
+/**
+ * why a section of its own: a masked secret is the symptom, and the cause is a defect somebody has to fix in code.
+ * Listed by cause, with the variable names and where they surfaced, so the operator can go to the line that logs
+ * or holds the credential ([/decisions/ad-149.md](/decisions/ad-149.md)).
+ */
+function secretHygieneSection(rollup: SessionRollup): string {
+  const entries = Object.entries(rollup.secretsByCause ?? {}).sort((a, b) => b[1].count - a[1].count);
+  if (entries.length === 0) {
+    return "";
+  }
+  return [
+    "",
+    "## Secret hygiene",
+    "",
+    "| Cause | Masked | Secrets | Seen in |",
+    "|-------|--------|---------|---------|",
+    ...entries.map(
+      ([cause, slot]) =>
+        `| ${cause} | ${slot.count} | ${slot.kinds.join(", ")} | ${slot.subjects.map((s) => `\`${s}\``).join(", ")} |`,
+    ),
+    "",
+    "Values are never recorded. Each row is a defect in the code or the workflow that printed the secret.",
+    "",
+  ].join("\n");
+}
+
 function gateTimeSection(rollup: SessionRollup): string {
   const entries = Object.entries(rollup.gateTime ?? {}).sort((a, b) => b[1].totalMs - a[1].totalMs);
   if (entries.length === 0) {
@@ -246,6 +272,7 @@ ${subs || "| — | 0 | {} |"}
 ${JSON.stringify(rollup.mcp, null, 2)}
 \`\`\`
 ${gateTimeSection(rollup)}
+${secretHygieneSection(rollup)}
 ${railActivity(rollup, activeRules)}
 ${costLines(rollup).join("\n")}
 `;
@@ -279,6 +306,14 @@ export function sessionReportScreen(rollup: SessionRollup): Screen {
       label: tool,
       value: `${stats.ok} ok, ${stats.fail} fail`,
       level: stats.fail > 0 ? ("warn" as const) : ("ok" as const),
+    }));
+
+  const secretRows: Row[] = Object.entries(rollup.secretsByCause ?? {})
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([cause, slot]) => ({
+      label: cause,
+      value: `${slot.count} masked — ${slot.kinds.join(", ")}${slot.subjects.length > 0 ? ` in ${slot.subjects.join(", ")}` : ""}`,
+      level: "warn" as const,
     }));
 
   const ruleRows: Row[] = Object.entries(rollup.shell.byRule ?? {})
@@ -328,6 +363,7 @@ export function sessionReportScreen(rollup: SessionRollup): Screen {
         ],
       },
       ...(ruleRows.length > 0 ? [{ title: "Interruptions by rule", rows: ruleRows }] : []),
+      ...(secretRows.length > 0 ? [{ title: "Secret hygiene", rows: secretRows }] : []),
       ...(toolRows.length > 0 ? [{ title: "Tools", rows: toolRows }] : []),
       ...(Object.keys(rollup.models).length > 0
         ? [{ title: "Models", lines: [top(rollup.models).join("  ·  ")] }]

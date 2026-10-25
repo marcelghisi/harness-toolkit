@@ -145,7 +145,12 @@ export function degrade(
     // duplicating the handling below — is what runs it through the same canCarryContext/budget logic every
     // other context decision already gets, with no special case for this one.
     return degrade(
-      { kind: "context", text: REWRITE_OUTPUT_UNAVAILABLE_NOTICE },
+      {
+        kind: "context",
+        text: decision.notice
+          ? `${REWRITE_OUTPUT_UNAVAILABLE_NOTICE}\n\n${decision.notice}`
+          : REWRITE_OUTPUT_UNAVAILABLE_NOTICE,
+      },
       event,
       capabilities,
       options,

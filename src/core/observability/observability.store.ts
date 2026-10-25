@@ -30,6 +30,11 @@ export type SessionRollup = {
    * can act on ([/decisions/ad-027.md](/decisions/ad-027.md)).
    */
   railsByRule: Record<string, number>;
+  /**
+   * why: what the redaction rail hid, by the cause that put it there. Optional, because a rollup written before
+   * this field existed has none ([/decisions/ad-149.md](/decisions/ad-149.md)).
+   */
+  secretsByCause?: Record<string, { count: number; kinds: string[]; subjects: string[] }>;
   /** Per-gate pass/fail, so a single flaky gate is distinguishable from a codebase that does not build. */
   gatesByName: Record<string, { pass: number; fail: number }>;
   /**

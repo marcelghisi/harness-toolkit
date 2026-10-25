@@ -323,3 +323,15 @@ test("a shell tool is not listed in the tools table it cannot be counted in", as
   assert.equal(labels.includes("Bash"), false, "the row could only ever report failures");
   assert.equal(labels.includes("Read"), true);
 });
+
+test("the report lists masked secrets by cause, with names and subjects, and omits the section when there were none", () => {
+  const rollup: SessionRollup = newRollup("sess", "provider-a");
+  assert.doesNotMatch(sessionReportMarkdown(rollup), /## Secret hygiene/);
+  rollup.secretsByCause = {
+    "logged-credential": { count: 3, kinds: ["env:DB_PASSWORD"], subjects: ["cat app.log"] },
+  };
+  const markdown = sessionReportMarkdown(rollup);
+  assert.match(markdown, /## Secret hygiene/);
+  assert.match(markdown, /\| logged-credential \| 3 \| env:DB_PASSWORD \| `cat app\.log` \|/);
+  assert.match(markdown, /Values are never recorded/);
+});

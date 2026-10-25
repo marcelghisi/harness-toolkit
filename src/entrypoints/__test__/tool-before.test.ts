@@ -82,6 +82,31 @@ test("paused, the floor still refuses a shell write to the policy surface", asyn
   }
 });
 
+// hazard: Claude Code's `Grep` names its target `path`, not `file_path`, so a search pointed at `.env` reached the
+// floor with no path and was allowed.
+test("a Grep tool call on a credential file or glob is refused by the floor", async () => {
+  const root = tempRoot();
+  try {
+    for (const toolInput of [
+      { pattern: "KEY", path: ".env", output_mode: "content" },
+      { pattern: "KEY", glob: ".env*", output_mode: "content" },
+    ]) {
+      const payload = JSON.stringify({
+        hook_event_name: "PreToolUse",
+        cwd: root,
+        session_id: "sess-1",
+        tool_name: "Grep",
+        tool_input: toolInput,
+      });
+      const outcome = await runHandler(toolBeforeHandler, stdinOf(payload), floorVerdict);
+      assert.equal(outcome.decision.kind, "deny", JSON.stringify(toolInput));
+      assert.match(outcome.decision.kind === "deny" ? outcome.decision.reason : "", /rule=secret-access/);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("paused, an ordinary shell command passes without the rails", async () => {
   const root = tempRoot();
   try {
@@ -1413,6 +1438,60 @@ describe("comment-policy-before-ship names what it checked, AD-131", () => {
         outcome.decision.kind === "deny" ? outcome.decision.diagnostic : undefined,
         `Checked ${root} at ${sha} · Reproduce: git diff ${sha} -- src/app.ts`,
       );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a write carrying a placeholder this session masked", () => {
+  test("is refused, naming the placeholder and the file", async () => {
+    const root = tempRoot();
+    try {
+      const placeholder = coreFacade.secretScan.placeholderFor(
+        root,
+        "claude-sess-1",
+        "hunter2!",
+        "env:DB_PASSWORD",
+      );
+      const outcome = await runHandler(
+        toolBeforeHandler,
+        stdinOf(
+          claudeTool(root, {
+            tool_name: "Write",
+            tool_input: {
+              file_path: join(root, "config.ts"),
+              content: `export const pw = "${placeholder}";\n`,
+            },
+          }),
+        ),
+      );
+      assert.equal(outcome.decision.kind, "deny");
+      if (outcome.decision.kind === "deny") {
+        assert.equal(outcome.decision.rule, "secret-placeholder-write");
+        assert.ok(outcome.decision.reason.includes(placeholder));
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a placeholder-shaped string the session never produced is ordinary text, so a fixture can be written", async () => {
+    const root = tempRoot();
+    try {
+      const outcome = await runHandler(
+        toolBeforeHandler,
+        stdinOf(
+          claudeTool(root, {
+            tool_name: "Write",
+            tool_input: {
+              file_path: join(root, "golden.json"),
+              content: '{"out":"[REDACTED:github-token:abcd1234]"}',
+            },
+          }),
+        ),
+      );
+      assert.notEqual(outcome.decision.kind, "deny");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
