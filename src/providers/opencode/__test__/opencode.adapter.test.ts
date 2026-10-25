@@ -54,6 +54,29 @@ test("read and grep both reach read.before with the path the floor checks", () =
   }
 });
 
+// hazard: an OpenCode older than this provider's target named the read target `filePath`, the floor saw no path,
+// and a `.env` read was allowed.
+test("a read target named filePath or file_path reaches the floor like path does", () => {
+  for (const field of ["filePath", "file_path"]) {
+    const event = opencodeToEvent({
+      provider: "opencode",
+      hook_event_name: "tool.execute.before",
+      session_id: "s1",
+      tool: "read",
+      directory: "/work/repo",
+      input: { [field]: "/work/repo/.env" },
+    });
+    assert.equal(event?.event, "read.before", field);
+    assert.equal(event?.filePath, "/work/repo/.env", field);
+  }
+});
+
+test("an abstain renders as an explicit action, never as the bare {} of an unrecognised event", () => {
+  assert.deepEqual(JSON.parse(opencodeRender({ kind: "abstain" }, eventOf("read-before")).stdout ?? ""), {
+    action: "abstain",
+  });
+});
+
 test("an underscored tool name is an MCP call", () => {
   const event = eventOf("mcp-before");
   assert.equal(event.event, "mcp.before");

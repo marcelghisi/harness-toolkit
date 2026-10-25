@@ -27,7 +27,9 @@ payload, and applies the reply to the live hook event:
 | `context` (after a tool) | appended to `result.content` |
 | `context` (session start) | appended to `system` on every request of that session |
 
-`execute.before` fails closed: a spawn error, a timeout or an unparseable reply throws. Every other hook fails open.
+`execute.before` fails closed: a spawn error, a timeout, an unparseable reply, or a reply with no `action` throws.
+A handler that ran and had nothing to say answers `abstain`; a bare `{}` is what a runtime that did not recognise the
+event writes, so it is treated as no answer. Every other hook fails open.
 The code-mode wrapper `execute` is skipped, because V2 fires the hook again for each inner call, and a `patch` is
 checked once per file its text names.
 
@@ -70,7 +72,8 @@ inbound normalizes `webfetch` and `websearch` to.
 
 Tool names are normalized in `opencode.inbound.ts` so core keeps one spelling per tool: `shell`→`Bash`,
 `read`→`Read`, `edit`/`patch`→`Edit`, `write`→`Write`, `subagent`→`Task`, `webfetch`→`WebFetch`,
-`websearch`→`WebSearch`; the input field `path` becomes `filePath`. `grep` with a `path` is a `read.before`,
+`websearch`→`WebSearch`; the input field `path` (or `filePath`, or `file_path`) becomes `filePath`, and a `read` that names none of them is
+refused, because the floor cannot judge a read it cannot name. `grep` with a `path` is a `read.before`,
 because it returns the lines of the file it searches.
 
 ## Event mapping

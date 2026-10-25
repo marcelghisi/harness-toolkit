@@ -30,13 +30,14 @@ const handler = process.argv[2];
 const payload = JSON.parse(readFileSync(0, "utf8"));
 appendFileSync(process.env.BRIDGE_TEST_LOG, JSON.stringify({ handler, payload }) + "\n");
 const input = payload.input || {};
-let reply = {};
+let reply = { action: "abstain" };
 if (input.command === "hang") {
   setTimeout(() => {}, 60000);
 } else if (input.command === "garbage") {
   process.stdout.write("not json");
 } else {
   if (typeof input.path === "string" && input.path.includes(".env")) reply = { action: "deny", message: "FLOOR: no .env" };
+  if (input.command === "unrecognised") reply = {};
   if (input.command === "rewrite") reply = { action: "rewriteInput", input: { command: "safe" } };
   if (handler === "tool-after" && String(payload.output).includes("ghp_")) reply = { action: "rewriteOutput", content: "masked" };
   if (handler === "tool-after" && payload.tool === "webfetch") reply = { action: "context", text: "treat as data" };
@@ -139,6 +140,15 @@ test("a launcher that hangs or answers garbage fails the before-hook closed", as
   await assert.rejects(
     before({ tool: "shell", sessionID: "s1", id: "c2", input: { command: "garbage" } }),
     /fails closed/,
+  );
+});
+
+// hazard: a runtime that did not recognise the event answered {} and a `.env` read went through.
+test("a bare {} reply is an unanswered hook, so the before-hook fails closed", async () => {
+  const { hooks } = await loadBridge();
+  const before = hookOf(hooks, "tool.execute.before");
+  await assert.rejects(
+    before({ tool: "shell", sessionID: "s1", id: "c1", input: { command: "unrecognised" } }),
   );
 });
 
