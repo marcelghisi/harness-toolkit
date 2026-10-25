@@ -109,12 +109,16 @@ function knownMatches(text: string, known: readonly KnownSecret[]): SecretMatch[
 
 // invariant: pure — no I/O, no network call, no subprocess. Every input is a string already in memory; the known
 // values are loaded by the caller (`secret-scan.known.ts`).
-export function scanForSecrets(text: string | undefined, known: readonly KnownSecret[] = []): SecretMatch[] {
+export function scanForSecrets(
+  text: string | undefined,
+  known: readonly KnownSecret[] = [],
+  options: { entropy?: boolean } = {},
+): SecretMatch[] {
   if (!text) {
     return [];
   }
   const fromKnown = knownMatches(text, known);
   const signature = signatureMatches(text).filter((match) => !fromKnown.some((k) => overlaps(match, k)));
-  const entropy = entropyMatches(text, [...fromKnown, ...signature]);
+  const entropy = options.entropy === false ? [] : entropyMatches(text, [...fromKnown, ...signature]);
   return [...fromKnown, ...signature, ...entropy].sort((a, b) => a.start - b.start);
 }

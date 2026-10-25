@@ -18,7 +18,7 @@ const NOT_SECRETS = new Set(["PWD", "OLDPWD"]);
  * invariant: shorter values are not masked. `dev`, `true`, `admin` appear in ordinary output far more often than as
  * a credential, and a five-character password is not one the mask could meaningfully protect anyway.
  */
-export const KNOWN_VALUE_MIN_LENGTH = 6;
+const KNOWN_VALUE_MIN_LENGTH = 6;
 
 // why: a connection string carries its password inside the URL, under a key with no sensitive word in its name.
 const URL_USERINFO = /[a-z][a-z0-9+.-]*:\/\/[^:/@\s]+:([^@\s]+)@/gi;

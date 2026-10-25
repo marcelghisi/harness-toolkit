@@ -201,9 +201,10 @@ import {
   recordObservation,
 } from "./rules/rules.store.ts";
 import { firingRules, mentionsGhApi, mentionsMcpAct, triggerMatches } from "./rules/rules.trigger.ts";
+import { classifyLeak, leakAdvice } from "./secret-scan/secret-scan.cause.ts";
 import { loadKnownSecrets } from "./secret-scan/secret-scan.known.ts";
 import { scanForSecrets } from "./secret-scan/secret-scan.service.ts";
-import { placeholderFor, sessionPlaceholders } from "./secret-scan/secret-scan.store.ts";
+import { adviseOnce, placeholderFor, sessionPlaceholders } from "./secret-scan/secret-scan.store.ts";
 import { evaluateShellCommand } from "./shell-policy/shell-policy.service.ts";
 import { clearShellStall } from "./shell-policy/shell-policy.stall.ts";
 import { coversHandler, decideShim } from "./shim/shim.precedence.ts";
@@ -566,6 +567,9 @@ export const coreFacade = {
     placeholderFor,
     loadKnownSecrets,
     sessionPlaceholders,
+    classifyLeak,
+    leakAdvice,
+    adviseOnce,
   },
   observe: {
     shouldObserve,

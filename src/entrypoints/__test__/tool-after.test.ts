@@ -643,11 +643,14 @@ test("EFH-07/EFH-10: a secret-shaped tool.after output under Claude renders upda
     );
     assert.equal(outcome.decision.kind, "rewriteOutput");
     if (outcome.decision.kind === "rewriteOutput") {
-      assert.match(outcome.decision.output, /^AWS key: \[REDACTED:aws-access-key:[0-9a-f]{8}\]$/);
+      assert.match(
+        outcome.decision.output,
+        /^AWS key: \[REDACTED:aws-access-key:[0-9a-f]{8}\]\n\n\[SECRET-HYGIENE other\] Grep exposed aws-access-key; /,
+      );
     }
     assert.ok(outcome.rendered.stdout);
     const rendered = JSON.parse(outcome.rendered.stdout as string) as { updatedToolOutput: string };
-    assert.match(rendered.updatedToolOutput, /^AWS key: \[REDACTED:aws-access-key:[0-9a-f]{8}\]$/);
+    assert.match(rendered.updatedToolOutput, /^AWS key: \[REDACTED:aws-access-key:[0-9a-f]{8}\]\n\n/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -723,7 +726,7 @@ test("a password from the project's .env is masked in a log line, under the vari
     if (outcome.decision.kind === "rewriteOutput") {
       assert.match(
         outcome.decision.output,
-        /^INFO db connect password=\[REDACTED:env:DB_PASSWORD:[0-9a-f]{8}\]$/,
+        /^INFO db connect password=\[REDACTED:env:DB_PASSWORD:[0-9a-f]{8}\]\n\n\[SECRET-HYGIENE other\]/,
       );
       assert.doesNotMatch(outcome.decision.output, /hunter2/);
     }
@@ -748,6 +751,43 @@ test("secrets.knownValues false stops reading .env, and the weak password passes
       ),
     );
     assert.equal(outcome.decision.kind, "abstain");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a leak is advised once per session and subject, and recorded by cause with names, never values", async () => {
+  const root = tempRoot();
+  try {
+    writeFileSync(join(root, ".env"), "DB_PASSWORD=hunter2!\n");
+    const payload = claudeToolAfter(root, {
+      tool_name: "Bash",
+      tool_input: { command: "cat app.log" },
+      tool_response: "INFO db connect password=hunter2!",
+    });
+    const first = await runHandler(toolAfterHandler, stdinOf(payload));
+    const second = await runHandler(toolAfterHandler, stdinOf(payload));
+    assert.equal(first.decision.kind, "rewriteOutput");
+    assert.equal(second.decision.kind, "rewriteOutput");
+    if (first.decision.kind === "rewriteOutput" && second.decision.kind === "rewriteOutput") {
+      assert.match(
+        first.decision.output,
+        /\[SECRET-HYGIENE logged-credential\] cat app\.log exposed env:DB_PASSWORD/,
+      );
+      assert.doesNotMatch(second.decision.output, /SECRET-HYGIENE/);
+    }
+    const masked = obsRecords(root).filter((record) => record.kind === "secret.masked");
+    assert.equal(masked.length, 2);
+    const attrs = (masked[0]?.attrs ?? {}) as Record<string, unknown>;
+    assert.deepEqual(attrs.kinds, ["env:DB_PASSWORD"]);
+    assert.equal(attrs.cause, "logged-credential");
+    // why: the audit trail stores the raw hook payload and the debug plane the command line — both reach disk.
+    const stateText = JSON.stringify([...allRecords(root), ...auditRecords(root)]);
+    assert.ok(auditRecords(root).length > 0, "the audit trail was written");
+    assert.doesNotMatch(stateText, /hunter2/);
+    const rollup = coreFacade.observability.getRollup(root, "claude-sess-1");
+    assert.equal(rollup?.secretsByCause?.["logged-credential"]?.count, 2);
+    assert.deepEqual(rollup?.secretsByCause?.["logged-credential"]?.subjects, ["cat app.log"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,4 +1,6 @@
 import type { HarnessEventKind } from "../../contracts/harness-event.ts";
+import type { KnownSecret } from "../secret-scan/secret-scan.known.ts";
+import { scanForSecrets } from "../secret-scan/secret-scan.service.ts";
 
 export type ObsLevel = "signal" | "debug";
 
@@ -29,7 +31,10 @@ export type ObsKind =
   | "policy.deny"
   // why: an observation is not a refusal. Sharing the kind would inflate the denial count with readings the
   // operator never lived through, which is the opposite of what the rail exists for.
-  | "policy.observe";
+  | "policy.observe"
+  // why: a masked secret is a defect in the code that produced it, so it is counted where the operator looks — by
+  // cause, with the variable names and never the values ([/decisions/ad-149.md](/decisions/ad-149.md)).
+  | "secret.masked";
 
 export type CostPool = "provider_native" | "other" | "auto" | "unknown";
 
@@ -79,6 +84,8 @@ export type ObservabilityConfig = {
   retentionDays: number;
   maxSignalEvents: number;
   globalSpool: boolean;
+  /** why: reading the hook's environment and `.env` is the operator's choice (`secrets.knownValues`), on disk too. */
+  maskKnownValues?: boolean;
 };
 
 export const DEFAULT_OBS: ObservabilityConfig = {
@@ -109,6 +116,7 @@ export const SIGNAL_KINDS = new Set<ObsKind>([
   "ship.claim",
   "policy.deny",
   "policy.observe",
+  "secret.masked",
 ]);
 
 export const LIVE_ALLOWLIST = new Set<ObsKind>([
@@ -175,17 +183,36 @@ export const EVENT_KIND_TO_OBS_KIND: Record<HarnessEventKind, ObsKind> = {
 const SECRET_KEY = /(token|secret|password|api[_-]?key|authorization|credential|private[_-]?key)/i;
 const SECRET_VALUE = /\b(ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g;
 
-export function redactDeep(value: unknown): unknown {
+/**
+ * hazard: this recognised three token shapes while the output rail recognised a dozen and every known value, so an
+ * AWS key, a JWT or a `.env` password the model never saw was still written in clear to `audit.jsonl` and
+ * `debug.jsonl` — the raw hook payload and the command line both reach disk through here
+ * ([/decisions/ad-149.md](/decisions/ad-149.md)).
+ *
+ * invariant: what reaches disk is masked by the same known values and signatures that mask what reaches the model.
+ *
+ * hazard: not by the entropy pass. Its alphabet includes `/`, so a temp path like `/var/folders/3w/43yq…` scores
+ * as a secret, and the records would lose the paths and diagnostics they exist to keep.
+ */
+function maskString(text: string, known: readonly KnownSecret[]): string {
+  let masked = text;
+  for (const match of [...scanForSecrets(text, known, { entropy: false })].reverse()) {
+    masked = `${masked.slice(0, match.start)}[REDACTED:${match.kind}]${masked.slice(match.end)}`;
+  }
+  return masked.replace(SECRET_VALUE, "[REDACTED]");
+}
+
+export function redactDeep(value: unknown, known: readonly KnownSecret[] = []): unknown {
   if (typeof value === "string") {
-    return value.replace(SECRET_VALUE, "[REDACTED]");
+    return maskString(value, known);
   }
   if (Array.isArray(value)) {
-    return value.map(redactDeep);
+    return value.map((item) => redactDeep(item, known));
   }
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = SECRET_KEY.test(key) ? "[REDACTED]" : redactDeep(nested);
+      out[key] = SECRET_KEY.test(key) ? "[REDACTED]" : redactDeep(nested, known);
     }
     return out;
   }

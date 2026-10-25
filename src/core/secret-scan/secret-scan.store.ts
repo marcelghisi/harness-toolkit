@@ -65,3 +65,33 @@ export function placeholderFor(root: string, sessionKey: string, matchedText: st
   writeStore(root, store);
   return placeholder;
 }
+
+function advisedPath(root: string): string {
+  return join(projectStateDir(root), "secret-advised.json");
+}
+
+/**
+ * why once: the same log read twice in a turn, or the same file opened again, is the same defect. Repeating the
+ * advice would spend context on what the agent was already told, which is how advice turns into noise.
+ *
+ * invariant: the key names a cause and a subject — a command or a path — never a value.
+ */
+export function adviseOnce(root: string, sessionKey: string, key: string): boolean {
+  const path = advisedPath(root);
+  let store: Record<string, string[]> = {};
+  if (existsSync(path)) {
+    try {
+      store = JSON.parse(readFileSync(path, "utf8")) as Record<string, string[]>;
+    } catch {}
+  }
+  const seen = store[sessionKey] ?? [];
+  if (seen.includes(key)) {
+    return false;
+  }
+  store[sessionKey] = [...seen, key];
+  try {
+    mkdirSync(projectStateDir(root), { recursive: true });
+    writeFileSync(path, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+  } catch {}
+  return true;
+}

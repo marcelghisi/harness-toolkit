@@ -29,7 +29,7 @@ export const OBS_CONFIG_AUDIT = { ...OBS_CONFIG, debugEnabled: true };
 // why: the base configs are module constants, so the one operator-controlled field has to be layered on
 // per call rather than baked in at import time.
 export function obsConfigFor(
-  policy: { obs: Policy["obs"] },
+  policy: { obs: Policy["obs"]; secrets?: Policy["secrets"] },
   base: ObservabilityConfig = OBS_CONFIG,
 ): ObservabilityConfig {
   return {
@@ -42,6 +42,7 @@ export function obsConfigFor(
     maxAttrChars: policy.obs.maxAttrChars,
     sessionCostAlertUsd: policy.obs.sessionCostAlertUsd,
     retentionDays: policy.obs.retentionDays,
+    maskKnownValues: policy.secrets?.knownValues ?? false,
   };
 }
 

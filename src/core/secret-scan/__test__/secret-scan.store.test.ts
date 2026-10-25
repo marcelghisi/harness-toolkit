@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import { projectStateDir } from "../../../platform/paths.ts";
-import { placeholderFor, sessionPlaceholders } from "../secret-scan.store.ts";
+import { adviseOnce, placeholderFor, sessionPlaceholders } from "../secret-scan.store.ts";
 
 const roots: string[] = [];
 
@@ -65,4 +65,12 @@ test("sessionPlaceholders lists only the placeholders this session handed out", 
   placeholderFor(root, "session-b", "other-secret", "env:API_TOKEN");
   assert.deepEqual(sessionPlaceholders(root, "session-a"), [mine]);
   assert.deepEqual(sessionPlaceholders(root, "session-none"), []);
+});
+
+test("adviseOnce answers true the first time a session meets a key, and false after", () => {
+  const root = newRoot();
+  assert.equal(adviseOnce(root, "session-a", "logged-credential:cat app.log"), true);
+  assert.equal(adviseOnce(root, "session-a", "logged-credential:cat app.log"), false);
+  assert.equal(adviseOnce(root, "session-b", "logged-credential:cat app.log"), true);
+  assert.equal(adviseOnce(root, "session-a", "hardcoded:src/config.ts"), true);
 });
