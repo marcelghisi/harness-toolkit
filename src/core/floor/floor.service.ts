@@ -1,6 +1,7 @@
 import type { Decision } from "../../contracts/decision.ts";
 import { isInside, isProtectedWiringTarget, isScratch, isSecretPath, resolveTarget } from "./floor.paths.ts";
 import { checkPolicySurface } from "./floor.policy-surface.ts";
+import { findSecretRead, globSelectsSecret } from "./floor.secrets.ts";
 import { type ShellSegment, type ShellWord, tokenizeShell } from "./floor.tokenize.ts";
 import { verbOf } from "./floor.verb.ts";
 
@@ -20,13 +21,15 @@ export type FloorInput = {
   filePath?: string | undefined;
   command?: string | undefined;
   isReadEvent?: boolean | undefined;
+  /** why: a search tool's glob selects files it reads even though no single path is named. */
+  searchGlob?: string | undefined;
   protectedPaths?: readonly string[] | undefined;
 };
 
 const DESTRUCTIVE_VERBS = new Set(["dd", "rm", "rmdir", "shred", "truncate"]);
 const MACHINE_VERBS = new Set(["halt", "poweroff", "reboot", "shutdown"]);
-const READER_VERBS = new Set(["base64", "cat", "head", "less", "more", "od", "strings", "tail", "xxd"]);
-const READING_TOOLS = new Set(["Read", "Edit", "MultiEdit", "NotebookEdit"]);
+// why: `Grep` returns matching lines, so pointing it at `.env` reads the file as surely as `Read` does.
+const READING_TOOLS = new Set(["Read", "Edit", "MultiEdit", "NotebookEdit", "Grep"]);
 // why: the spec's own AC3 names these three tool calls, not the wider WRITE_TOOLS set (which also carries
 // `Delete`/`NotebookEdit`) — a provider's wiring target is a settings/hooks document, never a notebook.
 const WIRING_EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit"]);
@@ -106,6 +109,14 @@ function fetchedProgramReachesShell(command: string, segments: readonly ShellSeg
 function buildsCommandAtRuntime(verb: string, args: ShellWord[]): boolean {
   return EXPANDING_VERBS.has(verb) || (SHELLS.has(verb) && args.some((word) => word.text === "-c"));
 }
+
+/**
+ * hazard: refused a read, agents told the operator to type `! cat .env` in the prompt "so the output goes straight
+ * to you". It does not — the prompt's `!` puts the output into the same conversation, which is the read this rule
+ * refused.
+ */
+const SECRET_REMEDY =
+  "Do not suggest `! cat` or any other prompt command to the operator: its output lands in this same conversation. The operator reads the file in a terminal outside this session.";
 
 function reason(rule: FloorRule, detail: string): string {
   return [
@@ -282,36 +293,26 @@ function checkShell(input: FloorInput): Decision {
 function checkShellSecrets(segments: ShellSegment[], projectDir: string): Decision {
   for (const segment of segments) {
     const head = verbOf(segment.words);
-    if (!head) {
+    if (!head || !NETWORK_VERBS.has(head.verb)) {
       continue;
     }
-    if (NETWORK_VERBS.has(head.verb)) {
-      const target = head.args.map((word) => word.text).join(" ");
-      const endpoint = METADATA_HOSTS.find((host) => target.includes(host));
-      if (endpoint !== undefined) {
-        return denial(
-          "secret-access",
-          `${endpoint} is the instance metadata service, and \`${head.verb}\` would copy the credentials it returns into the transcript.`,
-          `read of ${endpoint}`,
-        );
-      }
+    const target = head.args.map((word) => word.text).join(" ");
+    const endpoint = METADATA_HOSTS.find((host) => target.includes(host));
+    if (endpoint !== undefined) {
+      return denial(
+        "secret-access",
+        `${endpoint} is the instance metadata service, and \`${head.verb}\` would copy the credentials it returns into the transcript.`,
+        `read of ${endpoint}`,
+      );
     }
-    if (!READER_VERBS.has(head.verb)) {
-      continue;
-    }
-    for (const word of pathArgs(head.args)) {
-      if (word.unresolved) {
-        continue;
-      }
-      const resolved = resolveTarget(projectDir, word.text);
-      if (isSecretPath(resolved)) {
-        return denial(
-          "secret-access",
-          `\`${head.verb}\` would read ${resolved} into the transcript. Credentials do not belong in an agent's context.`,
-          `read of ${resolved}`,
-        );
-      }
-    }
+  }
+  const read = findSecretRead(projectDir, segments);
+  if (read) {
+    return denial(
+      "secret-access",
+      `\`${read.verb}\` would read ${read.path} into the transcript. Credentials do not belong in an agent's context. ${SECRET_REMEDY}`,
+      `read of ${read.path}`,
+    );
   }
   return { kind: "allow" };
 }
@@ -337,13 +338,25 @@ function checkFile(input: FloorInput): Decision {
   if (!reads) {
     return { kind: "allow" };
   }
-  if (!isSecretPath(resolved)) {
+  if (isSecretPath(resolved)) {
+    return denial(
+      "secret-access",
+      `${resolved} holds credentials, and reading it would copy them into the transcript. ${SECRET_REMEDY}`,
+      `read of ${resolved}`,
+    );
+  }
+  return { kind: "allow" };
+}
+
+function checkSearchGlob(input: FloorInput): Decision {
+  const glob = input.searchGlob;
+  if (!glob || !globSelectsSecret(glob)) {
     return { kind: "allow" };
   }
   return denial(
     "secret-access",
-    `${resolved} holds credentials, and reading it would copy them into the transcript.`,
-    `read of ${resolved}`,
+    `the glob \`${glob}\` selects credential files, and searching them would copy their lines into the transcript. ${SECRET_REMEDY}`,
+    `search of ${glob}`,
   );
 }
 
@@ -353,6 +366,10 @@ export function evaluateFloor(input: FloorInput): Decision {
   const file = checkFile(input);
   if (file.kind !== "allow") {
     return file;
+  }
+  const glob = checkSearchGlob(input);
+  if (glob.kind !== "allow") {
+    return glob;
   }
   return checkShell(input);
 }

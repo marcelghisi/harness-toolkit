@@ -28,8 +28,9 @@ export const FLOOR_RULES: Record<FloorRule, FloorRuleDoc> = {
   },
   "secret-access": {
     denies:
-      "a read that would copy a credential into the transcript — `.env`, `~/.ssh`, `~/.aws`, `*.pem` and similar through a shell reader or the editor's own read tool, and the instance metadata service through any verb that speaks to the network",
-    allows: "searching local files for the literal address, because `grep` and its kin make no request",
+      "a read that would copy a credential into the transcript — `.env`, `~/.ssh`, `~/.aws`, `*.pem` and similar through any verb that prints a file (`cat`, `grep`, `sed`, `awk`, an interpreter's inline code, a `<` redirect, `git show`), the editor's read and search tools, a copy under an ordinary name, and the instance metadata service through any verb that speaks to the network",
+    allows:
+      "naming the file without printing it (`ls`, `test -f`, `cp .env.example .env`, `--env-file .env`), and a recursive search over a directory — the floor reads no disk, so it cannot know a `.env` is inside",
   },
   "history-rewrite": {
     denies: "`git push --force`",

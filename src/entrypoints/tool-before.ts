@@ -269,6 +269,17 @@ function filePathOf(event: HarnessEvent): string | undefined {
   return typeof fromInput === "string" ? fromInput : undefined;
 }
 
+// why: `Grep` names its target `path`, so a search pointed at `.env` reached the floor with no path at all.
+function readTargetOf(event: HarnessEvent): string | undefined {
+  const searched = event.toolName === "Grep" ? event.toolInput?.path : undefined;
+  return typeof searched === "string" ? searched : filePathOf(event);
+}
+
+function searchGlobOf(event: HarnessEvent): string | undefined {
+  const glob = event.toolName === "Grep" ? event.toolInput?.glob : undefined;
+  return typeof glob === "string" ? glob : undefined;
+}
+
 async function handleToolBefore(event: HarnessEvent, ctx: HandlerContext): Promise<Decision> {
   const { policy, provider } = ctx;
 
@@ -325,9 +336,10 @@ export const floorVerdict: PausedHandler = (event, protectedPaths) =>
   coreFacade.floor.evaluateFloor({
     projectDir: event.projectDir,
     toolName: event.toolName,
-    filePath: filePathOf(event),
+    filePath: readTargetOf(event),
     command: event.command,
     isReadEvent: event.event === "read.before",
+    searchGlob: searchGlobOf(event),
     protectedPaths,
   });
 
