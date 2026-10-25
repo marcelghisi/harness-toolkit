@@ -294,6 +294,6 @@ if (import.meta.main) {
   }
 
   fetchPrices(dest);
-  console.log("install: ok — restart Cursor or Claude Code, then run `tlc harness doctor`");
+  console.log("install: ok — restart Cursor, Claude Code or OpenCode, then run `tlc harness doctor`");
   process.exit(report.missing.length > 0 ? 1 : 0);
 }

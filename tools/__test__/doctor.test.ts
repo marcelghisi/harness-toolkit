@@ -100,6 +100,26 @@ describe("providerWiringStatus", () => {
     assert.equal(providerWiringStatus(wiring), "not-installed");
   });
 
+  test("a file-strategy wiring is wired only while the file matches what install renders", () => {
+    const root = newRoot();
+    const hostDir = join(root, "opencode-home");
+    mkdirSync(join(hostDir, "plugins"), { recursive: true });
+    const target = join(hostDir, "plugins", "tlc-harness.js");
+    const wiring: ProviderWiring = {
+      target,
+      strategy: "file",
+      entries: [],
+      content: "// tlc-exec.mjs\n",
+      hostDir,
+    };
+    assert.equal(providerWiringStatus(wiring), "detected-but-unwired");
+    writeFileSync(target, "// tlc-exec.mjs\n");
+    assert.equal(providerWiringStatus(wiring), "wired");
+    writeFileSync(target, "// tlc-exec.mjs\n// edited by hand\n");
+    assert.equal(providerWiringStatus(wiring), "detected-but-unwired");
+    assert.match(wiringProblems(wiring)[0]?.reason ?? "", /differs/);
+  });
+
   test("detected-but-unwired for a replace-strategy target with no harness file yet", () => {
     const root = newRoot();
     const home = join(root, "cursor-home");

@@ -51,6 +51,9 @@ export const REDIRECTED_ENV = [
   // merges hook documents into whatever those resolve to.
   "CLAUDE_CONFIG_DIR",
   "CURSOR_CONFIG_DIR",
+  // why: `opencodeConfigDir` honours it ahead of `XDG_CONFIG_HOME`, so redirecting this one name is enough to keep
+  // a wiring step out of the operator's real OpenCode plugin directory.
+  "OPENCODE_CONFIG_DIR",
 ];
 
 /**

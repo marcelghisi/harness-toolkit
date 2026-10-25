@@ -355,11 +355,27 @@ export type ProviderWiringStatus = "wired" | "detected-but-unwired" | "not-insta
  * ([/decisions/ad-032.md](/decisions/ad-032.md)).
  */
 export function wiringProblems(wiring: ProviderWiring): WiringProblem[] {
+  if (wiring.strategy === "file") {
+    return fileWiringProblems(wiring.target, wiring.content);
+  }
   if (wiring.strategy !== "replace") {
     return [];
   }
   const text = existsSync(wiring.target) ? readFileSync(wiring.target, "utf8") : null;
   return cursorWiringProblems(text, { launcherPath: launcherPathOf(wiring) }, existsSync);
+}
+
+/**
+ * why whole-content equality: the file is rendered entirely by the provider, so any difference — an older launcher
+ * path, a hand edit — means the hooks the host loads are not the ones this install would write.
+ */
+function fileWiringProblems(target: string, content: string): WiringProblem[] {
+  if (!existsSync(target)) {
+    return [{ hookEvent: "plugin", reason: "the plugin file is missing" }];
+  }
+  return readFileSync(target, "utf8") === content
+    ? []
+    : [{ hookEvent: "plugin", reason: "the plugin file differs from what this install writes" }];
 }
 
 /**
@@ -372,8 +388,11 @@ function launcherPathOf(wiring: ProviderWiring): string {
 }
 
 export function providerWiringStatus(wiring: ProviderWiring): ProviderWiringStatus {
-  if (!existsSync(dirname(wiring.target))) {
+  if (!existsSync(wiring.strategy === "file" ? wiring.hostDir : dirname(wiring.target))) {
     return "not-installed";
+  }
+  if (wiring.strategy === "file") {
+    return wiringProblems(wiring).length === 0 ? "wired" : "detected-but-unwired";
   }
   if (wiring.strategy === "replace") {
     if (!isCursorWired(wiring.target)) {

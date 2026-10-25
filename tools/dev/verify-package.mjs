@@ -196,6 +196,7 @@ export function probeEnv(base, prefix, home) {
     TLC_BIN_DIR: join(home, ".local", "bin"),
     CLAUDE_CONFIG_DIR: join(home, ".claude"),
     CURSOR_CONFIG_DIR: join(home, ".cursor"),
+    OPENCODE_CONFIG_DIR: join(home, ".config", "opencode"),
   };
   for (const name of REDIRECTED_ENV) {
     if (UNSET_HERE.includes(name)) {

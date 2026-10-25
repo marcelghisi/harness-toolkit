@@ -91,6 +91,7 @@ function installedMachine(options: { linkedHome?: boolean } = {}): {
       binLinks: [binLink],
       claudeSettings: join(claudeDir, "settings.json"),
       cursorHooks: join(cursorDir, "hooks.json"),
+      pluginFiles: [],
       skillLinks,
     },
   };
@@ -278,6 +279,7 @@ test("a dangling link is still ours when an ancestor of the home is itself a sym
     binLinks: [binLink],
     claudeSettings: join(root, "absent.json"),
     cursorHooks: join(root, "absent-hooks.json"),
+    pluginFiles: [],
     skillLinks: [],
   });
   assert.equal(live.items.find((item) => item.target === binLink)?.action, "unlink");
@@ -288,6 +290,7 @@ test("a dangling link is still ours when an ancestor of the home is itself a sym
     binLinks: [binLink],
     claudeSettings: join(root, "absent.json"),
     cursorHooks: join(root, "absent-hooks.json"),
+    pluginFiles: [],
     skillLinks: [],
   });
   assert.equal(dangling.items.find((item) => item.target === binLink)?.action, "unlink");
@@ -347,10 +350,10 @@ test("every launcher name and every skill layout is a target, with no platform t
     "the name the PowerShell installer copied",
   );
 
-  assert.equal(targets.skillLinks.length, 3);
+  assert.equal(targets.skillLinks.length, 4);
   assert.equal(
     targets.skillLinks.filter((path) => path.endsWith("harness-init")).length,
-    3,
+    4,
     "each one names the skill",
   );
   assert.ok(
@@ -370,6 +373,7 @@ test("a launcher installed as a copy is removed; an unrelated file of the same n
     home: join(root, "runtime"),
     claudeSettings: join(root, "absent.json"),
     cursorHooks: join(root, "absent-hooks.json"),
+    pluginFiles: [],
     skillLinks: [],
   };
   assert.equal(
@@ -380,4 +384,26 @@ test("a launcher installed as a copy is removed; an unrelated file of the same n
     planUninstall({ ...base, binLinks: [theirs] }).items.find((i) => i.target === theirs)?.action,
     "keep",
   );
+});
+
+test("a plugin file the harness rendered is removed, larger than the launcher size cap; a foreign one is kept", () => {
+  const root = tempRoot();
+  const ours = join(root, "tlc-harness.js");
+  const theirs = join(root, "someone-else.js");
+  writeFileSync(ours, `// tlc-exec.mjs\n${"x".repeat(8192)}\n`);
+  writeFileSync(theirs, "export default { id: 'other', setup() {} };\n");
+
+  const base = {
+    home: join(root, "runtime"),
+    binLinks: [],
+    claudeSettings: join(root, "absent.json"),
+    cursorHooks: join(root, "absent-hooks.json"),
+    skillLinks: [],
+  };
+  const plan = planUninstall({ ...base, pluginFiles: [ours, theirs] });
+  assert.equal(plan.items.find((i) => i.target === ours)?.action, "remove");
+  assert.equal(plan.items.find((i) => i.target === theirs)?.action, "keep");
+  applyUninstall(plan, { ...base, pluginFiles: [ours, theirs] });
+  assert.equal(existsSync(ours), false);
+  assert.equal(existsSync(theirs), true);
 });
