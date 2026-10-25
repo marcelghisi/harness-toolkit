@@ -6,6 +6,10 @@ Each entry is an architectural decision record: what changed, why, what was refu
 A **Needs your action** line is a change `tlc harness doctor` cannot detect for you; everything else
 doctor reports against your own configuration.
 
+## Unreleased
+
+- **AD-147** — OpenCode V2 joins as a third provider, wired by a generated plugin file
+
 ## v0.16.8
 
 - **AD-146** — gates are verdicts about a tree; hooks read them and never wait for a suite

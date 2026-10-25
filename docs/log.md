@@ -13,6 +13,10 @@ Generated from `docs/decisions/` — do not edit by hand. Run `node tools/render
 A reserved file of the [OKF v0.1](/decisions/ad-013.md) bundle: entries grouped under ISO 8601 headings,
 newest first. For what landed in which npm release, see `CHANGELOG.md` at the repository root.
 
+## 2026-10-25
+
+- **AD-147** — OpenCode V2 joins as a third provider, wired by a generated plugin file ([/decisions/ad-147.md](/decisions/ad-147.md))
+
 ## 2026-10-24
 
 - **AD-146** — gates are verdicts about a tree; hooks read them and never wait for a suite ([/decisions/ad-146.md](/decisions/ad-146.md))

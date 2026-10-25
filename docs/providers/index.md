@@ -1,7 +1,7 @@
 ---
 type: Aggregate
 title: "Providers index"
-description: "Index of the provider adapters — Cursor and Claude Code — and the port they both implement."
+description: "Index of the provider adapters — Cursor, Claude Code and OpenCode — and the port they all implement."
 tags: [providers, index, architecture]
 timestamp: "2026-07-29"
 ---
@@ -21,6 +21,8 @@ type ProviderPort = {
   toEvent(raw: Record<string, unknown>): HarnessEvent | null;
   render(decision: Decision, event: HarnessEvent): Rendered;
   wiring(runtime: RuntimePaths): ProviderWiring;
+  wiringTargets(): string[];
+  lessonsView(root: string): string | null;
 };
 ```
 
@@ -31,7 +33,11 @@ type ProviderPort = {
   [/decisions/ad-011.md](/decisions/ad-011.md)).
 - `toEvent` — parses a raw hook payload into the shared `HarnessEvent` shape.
 - `render` — turns a core `Decision` back into this provider's wire format.
-- `wiring` — describes which hooks this provider needs registered, and where.
+- `wiring` — describes which hooks this provider needs registered, and where: merged into a host document,
+  replacing one, or one whole generated file (see [/decisions/ad-147.md](/decisions/ad-147.md)).
+- `wiringTargets` — every path whose overwrite would silence this provider's hooks; the `wiring-tamper` floor rule
+  protects them (see [/decisions/ad-124.md](/decisions/ad-124.md)).
+- `lessonsView` — a durable lessons file for a host whose session-start context is unreliable, or `null`.
 
 ## Registered providers
 
@@ -42,10 +48,11 @@ matches are reported as ambiguous rather than silently resolved:
 | --- | --- | --- |
 | Cursor | camelCase `hook_event_name` + `workspace_roots` array | [/providers/cursor.md](/providers/cursor.md) |
 | Claude Code | PascalCase `hook_event_name` + `cwd` or `transcript_path` | [/providers/claude-code.md](/providers/claude-code.md) |
+| OpenCode (V2) | `provider: "opencode"` + dotted `hook_event_name`, stamped by its generated plugin | [/providers/opencode.md](/providers/opencode.md) |
 
 ## Event kinds
 
-Both adapters translate into the same 18-member `HarnessEventKind` union (see
+Every adapter translates into the same 18-member `HarnessEventKind` union (see
 [/decisions/ad-009.md](/decisions/ad-009.md) item 1): `session.start`, `session.end`, `prompt.submit`,
 `tool.before`, `tool.after`, `tool.failure`, `shell.before`, `shell.after`, `mcp.before`, `mcp.after`,
 `read.before`, `edit.after`, `subagent.start`, `subagent.stop`, `stop`, `compact.before`, `response.after`,

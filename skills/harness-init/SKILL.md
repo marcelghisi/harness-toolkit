@@ -28,6 +28,8 @@ Help SoT is CLI docs (`tlc harness help <topic>`), not this skill. For Q&A only,
    and wiring the default path would write a file the agent never reads. `tlc harness doctor` prints the
    resolved target for each provider — read it from there rather than guessing. Tell the user which
    provider(s) will be wired. Never assume Cursor: a Claude-only machine has no Cursor directory at all.
+   OpenCode (V2) honours `OPENCODE_CONFIG_DIR`, then `$XDG_CONFIG_HOME/opencode`; it is wired once per
+   machine by `tlc harness install`, as a plugin file, and needs nothing per project.
 4. If `.tlc/harness/config.json` already exists, show it and ask: **overwrite**, **merge**, or **abort**.
 
 ### Step 1b: Hook runtime (ask once, never block)
@@ -211,7 +213,8 @@ Only after confirmation:
 4. `tlc harness init` writes project shim hooks only for providers detected present, using the config
    directory each provider actually resolves to — the defaults are `~/.cursor` and `~/.claude`, but
    `CURSOR_CONFIG_DIR` and `CLAUDE_CONFIG_DIR` override them and a relocated config is common. Take the
-   resolved paths from `tlc harness doctor` rather than assuming either default.
+   resolved paths from `tlc harness doctor` rather than assuming either default. OpenCode gets no project
+   file: its user-level plugin already runs in every project, and a second copy would run each hook twice.
 5. Ensure `.gitignore` covers `.tlc/harness/state/`.
 6. If `intelligence.lessons.enabled` is true and `syncRulesFile` is not `never`, run `tlc harness lessons
    sync-rules` once after write. Under the default `auto` the durable view is written where the provider does not
