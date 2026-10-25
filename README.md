@@ -273,7 +273,7 @@ or removed fails the build rather than leaving a claim standing.
 
 ## Providers
 
-Both providers share one runtime, one project policy file, and one on-disk state directory. Core steering
+Every provider shares one runtime, one project policy file, and one on-disk state directory. Core steering
 logic never imports a provider adapter and never branches on a provider's name — see
 [`docs/architecture.md`](docs/architecture.md) and [`docs/providers/index.md`](docs/providers/index.md).
 
@@ -281,6 +281,7 @@ logic never imports a provider adapter and never branches on a provider's name �
 |----------|-------------|--------------------|------|
 | **Cursor** | `CURSOR_CONFIG_DIR`, else `~/.cursor` | `<resolved>/hooks.json` (replaced) | [`docs/providers/cursor.md`](docs/providers/cursor.md) |
 | **Claude Code** | `CLAUDE_CONFIG_DIR`, else `~/.claude` | `<resolved>/settings.json` `hooks` block (merged) | [`docs/providers/claude-code.md`](docs/providers/claude-code.md) |
+| **OpenCode** (V2) | `OPENCODE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode` | `<resolved>/plugins/tlc-harness.js` (generated plugin) | [`docs/providers/opencode.md`](docs/providers/opencode.md) |
 
 The installer and `tlc harness init` detect which of these are present and wire only those — neither
 assumes Cursor.
@@ -360,8 +361,8 @@ Neither of those applies to the ordinary route: `tlc harness test` runs the whol
 entrypoints can be driven with real hook payloads from a scratch directory, so most work needs no live session at
 all.
 
-Provider config directories are resolved, not assumed: `CLAUDE_CONFIG_DIR` and `CURSOR_CONFIG_DIR` are
-honoured when set, so a relocated config is wired correctly. `tlc harness doctor` prints the resolved
+Provider config directories are resolved, not assumed: `CLAUDE_CONFIG_DIR`, `CURSOR_CONFIG_DIR` and
+`OPENCODE_CONFIG_DIR` are honoured when set, so a relocated config is wired correctly. `tlc harness doctor` prints the resolved
 target for each provider.
 
 ### Uninstall

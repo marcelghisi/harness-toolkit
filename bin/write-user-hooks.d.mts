@@ -31,6 +31,10 @@ export type ClaudeApplyResult =
   | { status: "unchanged"; target: string }
   | { status: "failed"; target: string; reason: string };
 
+export type FileApplyResult = CursorApplyResult;
+
+export function applyFileWiring(wiring: ProviderWiring, options?: ApplyOptions): FileApplyResult;
+
 export type ApplyResult = CursorApplyResult | ClaudeApplyResult;
 
 export function applyProviderWiring(wiring: ProviderWiring, options?: ApplyOptions): ApplyResult;

@@ -1,0 +1,1 @@
+{"provider":"opencode","hook_event_name":"tool.execute.before","session_id":"ses_01","call_id":"call_6","tool":"edit","directory":"/work/repo","input":{"path":"src/a.ts","oldString":"a","newString":"b"}}

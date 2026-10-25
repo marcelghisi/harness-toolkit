@@ -154,6 +154,17 @@ export function cursorConfigDir(): string {
   return custom && custom.length > 0 ? custom : join(homedir(), ".cursor");
 }
 
+// invariant: the same order OpenCode V2 resolves its own global config directory in — `OPENCODE_CONFIG_DIR`,
+// then `$XDG_CONFIG_HOME/opencode`, then `~/.config/opencode` (`packages/util/src/global.ts` at v2.1.4).
+export function opencodeConfigDir(): string {
+  const custom = process.env.OPENCODE_CONFIG_DIR?.trim();
+  if (custom && custom.length > 0) {
+    return custom;
+  }
+  const xdg = process.env.XDG_CONFIG_HOME?.trim();
+  return join(xdg && xdg.length > 0 ? xdg : join(homedir(), ".config"), "opencode");
+}
+
 /**
  * The user-level hook documents, in the order the shim reads them.
  *
@@ -178,7 +189,7 @@ export function userSettingsPaths(): string[] {
  * itself installed under a relocated one ([/decisions/ad-095.md](/decisions/ad-095.md)).
  */
 export function providerConfigDirs(): string[] {
-  return [cursorConfigDir(), claudeConfigDir()];
+  return [cursorConfigDir(), claudeConfigDir(), opencodeConfigDir()];
 }
 
 /**

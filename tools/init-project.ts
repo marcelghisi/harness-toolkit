@@ -5,7 +5,13 @@ import { applyCursorWiring, renderCursorHooksDocument } from "../bin/write-user-
 import type { WiringEntry } from "../src/contracts/index.ts";
 import { coreFacade } from "../src/core/index.ts";
 import { DEFAULTS } from "../src/core/policy/policy.defaults.ts";
-import { claudeConfigDir, cursorConfigDir, projectConfigPath, runtimeHome } from "../src/platform/paths.ts";
+import {
+  claudeConfigDir,
+  cursorConfigDir,
+  opencodeConfigDir,
+  projectConfigPath,
+  runtimeHome,
+} from "../src/platform/paths.ts";
 import { render, type Screen } from "../src/platform/screen.ts";
 import { PLAIN, type Style } from "../src/platform/style.ts";
 import { applyClaudeWiring } from "../src/providers/claude/claude.wiring.ts";
@@ -343,6 +349,13 @@ export async function main(argv: string[]): Promise<void> {
     console.log("init: claude not installed — skipped project settings.json");
   } else {
     console.log(`hooks: ${outcome.claude.status} ${outcome.claude.target}`);
+  }
+  // why: no project file — OpenCode loads the user-level plugin `tlc harness install` writes in every project, and a
+  // project copy would run every hook twice — the duplicate the shim exists to prevent for the other two hosts.
+  if (existsSync(opencodeConfigDir())) {
+    console.log(
+      "init: opencode uses the user-level plugin from `tlc harness install` — no project file needed",
+    );
   }
   console.log("updated .gitignore harness entries");
 }

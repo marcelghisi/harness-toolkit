@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { withEnv as scopedEnv } from "../../../tools/test-env.scope.mjs";
-import { claudeConfigDir, cursorConfigDir } from "../paths.ts";
+import { claudeConfigDir, cursorConfigDir, opencodeConfigDir } from "../paths.ts";
 
 // why a wrapper and not the shared helper directly: this file's callers pass one name, and rewriting every call
 // site to pass an object would be churn for no reading gained ([/decisions/ad-102.md](/decisions/ad-102.md)).
@@ -48,5 +48,22 @@ test("provider wiring targets follow the resolved config dir", async () => {
   });
   withEnv("CURSOR_CONFIG_DIR", cursorDir, () => {
     assert.equal(cursorWiring(runtime).target, join(cursorDir, "hooks.json"));
+  });
+});
+
+test("OPENCODE_CONFIG_DIR resolves in the host's own order: its variable, then XDG_CONFIG_HOME, then ~/.config", () => {
+  const xdg = join("/home", "x", ".xdg");
+  withEnv("OPENCODE_CONFIG_DIR", "/home/x/.oc-alt", () => {
+    withEnv("XDG_CONFIG_HOME", xdg, () => {
+      assert.equal(opencodeConfigDir(), "/home/x/.oc-alt");
+    });
+  });
+  withEnv("OPENCODE_CONFIG_DIR", undefined, () => {
+    withEnv("XDG_CONFIG_HOME", xdg, () => {
+      assert.equal(opencodeConfigDir(), join(xdg, "opencode"));
+    });
+    withEnv("XDG_CONFIG_HOME", undefined, () => {
+      assert.equal(opencodeConfigDir(), join(homedir(), ".config", "opencode"));
+    });
   });
 });

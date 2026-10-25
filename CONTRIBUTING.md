@@ -229,7 +229,7 @@ documented step rather than an orphaned tool ([/decisions/ad-080.md](/decisions/
 - Do not add lint suppressions to silence gates.
 - Ship claims use `HARNESS_SHIP_CLAIM: …` only.
 - `core/` and `contracts/` never contain a vendor identifier (`cursor`, `claude`, `codex`, `composer`,
-  `anthropic`) — see [`docs/decisions/ad-004.md`](docs/decisions/ad-004.md) and
+  `anthropic`, `opencode`) — see [`docs/decisions/ad-004.md`](docs/decisions/ad-004.md) and
   [`docs/decisions/ad-007.md`](docs/decisions/ad-007.md).
 - Documentation under `docs/` is an OKF v0.1 bundle — new docs need `type`/`title`/`description`/`tags`/
   `timestamp` frontmatter and absolute bundle-relative links. See

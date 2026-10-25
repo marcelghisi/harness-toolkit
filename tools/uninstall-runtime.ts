@@ -17,12 +17,14 @@ import {
   cursorConfigDir,
   launcherBinDir,
   launcherNames,
+  opencodeConfigDir,
   runtimeHome,
 } from "../src/platform/paths.ts";
 import { type Row, render, type Screen } from "../src/platform/screen.ts";
 import { createStyle, PLAIN, type Style } from "../src/platform/style.ts";
 import { removeClaudeWiring, unmergeClaudeSettings } from "../src/providers/claude/claude.wiring.ts";
 import { unwireCursorHooks } from "../src/providers/cursor/cursor.wiring.ts";
+import { providers } from "../src/providers/index.ts";
 import { OPERATOR_OWNED, RUNTIME_PAYLOAD } from "./install-runtime.ts";
 
 /**
@@ -46,6 +48,7 @@ export type UninstallTargets = {
   binLinks: string[];
   claudeSettings: string;
   cursorHooks: string;
+  pluginFiles: string[];
   skillLinks: string[];
 };
 
@@ -71,9 +74,16 @@ export function uninstallTargets(env: NodeJS.ProcessEnv = process.env): Uninstal
     binLinks: launcherNames().map((name) => join(binDir, name)),
     claudeSettings: join(claudeConfigDir(), "settings.json"),
     cursorHooks: join(cursorConfigDir(), "hooks.json"),
+    // why: read from the registry — a `file` wiring is one whole file the provider names, so removing it needs no
+    // per-provider code — a new provider of that shape is uninstalled the day it is registered.
+    pluginFiles: providers.flatMap((provider) => {
+      const wiring = provider.wiring({ launcherPath: "" });
+      return wiring.strategy === "file" ? [wiring.target] : [];
+    }),
     skillLinks: [
       join(claudeConfigDir(), "skills", "harness-init"),
       join(cursorConfigDir(), "skills", "harness-init"),
+      join(opencodeConfigDir(), "skills", "harness-init"),
       // the layout the PowerShell installer wrote: one junction no provider ever read
       join(userHome, ".tlc", "skills", "harness-init"),
     ],
@@ -257,6 +267,23 @@ function planCursor(items: PlanItem[], hooksPath: string): void {
   }
 }
 
+// hazard: `carriesLauncherMarker` caps the size it reads at 4 KiB, and a rendered plugin is larger than that, so the
+// marker is checked here without the cap. The file is one the provider renders, never an operator's document.
+function planPluginFile(items: PlanItem[], path: string): void {
+  if (!existsSync(path)) {
+    return;
+  }
+  let text = "";
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {}
+  items.push(
+    text.includes(LAUNCHER_MARKER)
+      ? { action: "remove", target: path, detail: "the harness plugin file" }
+      : { action: "keep", target: path, detail: "a plugin file the installer did not write" },
+  );
+}
+
 function planRuntime(items: PlanItem[], home: string, purge: boolean): boolean {
   const homeIsLink = isSymlink(home);
   if (homeIsLink) {
@@ -319,6 +346,9 @@ export function planUninstall(targets: UninstallTargets, options: { purge?: bool
 
   planClaude(items, targets.claudeSettings);
   planCursor(items, targets.cursorHooks);
+  for (const file of targets.pluginFiles) {
+    planPluginFile(items, file);
+  }
   for (const link of targets.skillLinks) {
     planLink(items, link, targets.home, "skill link", "location");
   }

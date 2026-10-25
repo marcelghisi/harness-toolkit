@@ -1,0 +1,1 @@
+{"provider":"opencode","hook_event_name":"tool.execute.after","session_id":"ses_01","call_id":"call_8","tool":"patch","directory":"/work/repo","input":{"patchText":"*** Begin Patch\n*** Update File: src/a.ts\n*** End Patch"},"output":"ok"}

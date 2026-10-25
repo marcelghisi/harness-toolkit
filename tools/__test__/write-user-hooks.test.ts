@@ -241,6 +241,45 @@ describe("applyProviderWiring", () => {
   });
 });
 
+describe("file-strategy wiring", () => {
+  function fileWiring(root: string): ProviderWiring {
+    const hostDir = join(root, "opencode");
+    mkdirSync(hostDir, { recursive: true });
+    return {
+      target: join(hostDir, "plugins", "tlc-harness.js"),
+      strategy: "file",
+      entries: [],
+      content: "// tlc-exec.mjs\nexport default {};\n",
+      hostDir,
+    };
+  }
+
+  test("writes the rendered content, creating the plugin directory, then reports unchanged", () => {
+    const root = newRoot();
+    const wiring = fileWiring(root);
+    assert.equal(applyProviderWiring(wiring).status, "written");
+    assert.equal(readFileSync(wiring.target, "utf8"), wiring.strategy === "file" ? wiring.content : "");
+    assert.equal(applyProviderWiring(wiring).status, "unchanged");
+  });
+
+  test("refuses to overwrite a file at that path the harness did not write, unless forced", () => {
+    const root = newRoot();
+    const wiring = fileWiring(root);
+    mkdirSync(dirname(wiring.target), { recursive: true });
+    writeFileSync(wiring.target, "export default { id: 'theirs' };\n");
+    assert.equal(applyProviderWiring(wiring).status, "refused");
+    assert.equal(readFileSync(wiring.target, "utf8"), "export default { id: 'theirs' };\n");
+    assert.equal(applyProviderWiring(wiring, { force: true }).status, "written");
+  });
+
+  test("decides presence by the host directory, not the plugin directory", () => {
+    const root = newRoot();
+    const wiring = fileWiring(root);
+    assert.equal(existsSync(dirname(wiring.target)), false);
+    assert.equal(isProviderHomePresent(wiring), true);
+  });
+});
+
 describe("isProviderHomePresent", () => {
   test("is true when the target's parent directory exists", () => {
     const root = newRoot();

@@ -154,6 +154,7 @@ Handoff section and a link back to this index.
 | [AD-144](/decisions/ad-144.md) | turn_base_sha records the git root it came from, and a mismatch falls back to HEAD | active |
 | [AD-145](/decisions/ad-145.md) | a session's last real shell cwd is recalled wherever the host reports none | active |
 | [AD-146](/decisions/ad-146.md) | gates are verdicts about a tree; hooks read them and never wait for a suite | active |
+| [AD-147](/decisions/ad-147.md) | OpenCode V2 joins as a third provider, wired by a generated plugin file | active |
 
 ## Archived
 

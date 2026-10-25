@@ -58,7 +58,32 @@ export function applyCursorWiring(wiring, { force = false } = {}) {
   return { status: "written", target: targetPath };
 }
 
+// invariant: a file wiring is ours only while it carries the launcher marker. A file without it at that path was
+// put there by somebody else, and an install that overwrote it would destroy their plugin.
+export function applyFileWiring(wiring, { force = false } = {}) {
+  const targetPath = wiring.target;
+  if (existsSync(targetPath)) {
+    const current = readFileSync(targetPath, "utf8");
+    if (current === wiring.content) {
+      return { status: "unchanged", target: targetPath };
+    }
+    if (!current.includes(CURSOR_MARKER) && !force) {
+      return {
+        status: "refused",
+        target: targetPath,
+        reason: `${targetPath} exists and was not written by the harness — rerun with --force to overwrite it.`,
+      };
+    }
+  }
+  mkdirSync(dirname(targetPath), { recursive: true });
+  writeFileSync(targetPath, wiring.content);
+  return { status: "written", target: targetPath };
+}
+
 export function applyProviderWiring(wiring, { force = false } = {}) {
+  if (wiring.strategy === "file") {
+    return applyFileWiring(wiring, { force });
+  }
   if (wiring.strategy === "replace") {
     return applyCursorWiring(wiring, { force });
   }
@@ -70,7 +95,7 @@ export function applyProviderWiring(wiring, { force = false } = {}) {
 }
 
 export function isProviderHomePresent(wiring) {
-  return existsSync(dirname(wiring.target));
+  return existsSync(wiring.strategy === "file" ? wiring.hostDir : dirname(wiring.target));
 }
 
 function report(result) {
@@ -107,7 +132,8 @@ export function main() {
   for (const provider of providers) {
     const wiring = provider.wiring({ launcherPath });
     if (!isProviderHomePresent(wiring)) {
-      console.log(`hooks: ${provider.name} not installed — skipping (${dirname(wiring.target)} not found)`);
+      const hostDir = wiring.strategy === "file" ? wiring.hostDir : dirname(wiring.target);
+      console.log(`hooks: ${provider.name} not installed — skipping (${hostDir} not found)`);
       continue;
     }
     if (!report(applyProviderWiring(wiring, { force }))) {

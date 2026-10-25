@@ -1,0 +1,1 @@
+{"provider":"opencode","hook_event_name":"tool.execute.before","session_id":"ses_01","call_id":"call_3","tool":"grep","directory":"/work/repo","input":{"pattern":"PASSWORD","path":"/work/repo/.env"}}
