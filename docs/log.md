@@ -16,6 +16,7 @@ newest first. For what landed in which npm release, see `CHANGELOG.md` at the re
 ## 2026-10-25
 
 - **AD-148** — known secret values are masked by value, a masked placeholder cannot be written back, and Bash output reaches the mask ([/decisions/ad-148.md](/decisions/ad-148.md))
+- **AD-149** — a masked secret names its cause, advises the fix once, is counted in the session report, and never reaches disk ([/decisions/ad-149.md](/decisions/ad-149.md))
 
 ## 2026-10-24
 

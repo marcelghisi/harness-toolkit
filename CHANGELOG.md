@@ -9,6 +9,7 @@ doctor reports against your own configuration.
 ## Unreleased
 
 - **AD-148** — known secret values are masked by value, a masked placeholder cannot be written back, and Bash output reaches the mask
+- **AD-149** — a masked secret names its cause, advises the fix once, is counted in the session report, and never reaches disk
 
 ## v0.16.8
 

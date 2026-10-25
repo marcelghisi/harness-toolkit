@@ -346,6 +346,12 @@ A write carrying a placeholder this session handed out is refused (`secret-place
 masked value, and writing that text back would replace the real credential in the file. A placeholder-shaped
 string the session never produced — a test fixture, a doc — is ordinary text and passes.
 
+Each masked output is also classified by cause — `logged-credential`, `argv-credential`, `env-dump`, `hardcoded`
+or `other`. The first time a session meets a cause and subject, one `[SECRET-HYGIENE <cause>]` line is appended to
+the masked output with the fix: never log a credential at any level, debug included; log its metadata (present,
+length, source, an HMAC fingerprint) instead. `tlc harness obs report` lists every masked secret by cause in a
+**Secret hygiene** section, with variable names and where they surfaced, never values.
+
 ## intelligence (rails)
 
 | Key | Effect |

@@ -155,6 +155,7 @@ Handoff section and a link back to this index.
 | [AD-145](/decisions/ad-145.md) | a session's last real shell cwd is recalled wherever the host reports none | active |
 | [AD-146](/decisions/ad-146.md) | gates are verdicts about a tree; hooks read them and never wait for a suite | active |
 | [AD-148](/decisions/ad-148.md) | known secret values are masked by value, a masked placeholder cannot be written back, and Bash output reaches the mask | active |
+| [AD-149](/decisions/ad-149.md) | a masked secret names its cause, advises the fix once, is counted in the session report, and never reaches disk | active |
 
 ## Archived
 
