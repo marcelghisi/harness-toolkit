@@ -80,3 +80,53 @@ test("no network call, no subprocess spawn: the module imports nothing beyond it
   const source = readFileSync(new URL("../secret-scan.service.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /node:child_process|node:http|node:https|\bfetch\(/);
 });
+
+function maskedValues(text: string): string[] {
+  return scanForSecrets(text).map((match) => text.slice(match.start, match.end));
+}
+
+/**
+ * hazard: a human-chosen password is low-entropy and has no provider shape, so every line below passed through the
+ * output redaction unmasked while the provider keys beside them were caught.
+ */
+test("a low-entropy password in a key=value, a quoted assignment or a URL is masked, value only", () => {
+  const cases: [string, string][] = [
+    ["login user=ana password=fixture-pass1", "fixture-pass1"],
+    ["db_password=fixture-db-pass", "fixture-db-pass"],
+    ["DATABASE_PASSWORD=fixturepass", "fixturepass"],
+    ["smtp_password=fixture smtp_host=mail", "fixture"],
+    ['{"client_secret": "fixture-secret"}', "fixture-secret"],
+    ["password: 'fixture-yaml'", "fixture-yaml"],
+    ["postgresql://app:fixture-pg@db.internal:5432/app", "fixture-pg"],
+    ["mongodb://root:fixture-mongo@mongo:27017", "fixture-mongo"],
+    ["GET /cb?api_key=fixturekey&x=1", "fixturekey"],
+  ];
+  for (const [text, value] of cases) {
+    assert.deepEqual(maskedValues(text), [value], text);
+  }
+});
+
+// invariant: what a careful log already prints in place of a secret, and code that only names one, stays as it is.
+test("placeholders and code that names a password are not masked", () => {
+  for (const text of [
+    `DATABASE_PASSWORD=${"$"}{DATABASE_PASSWORD}`,
+    "password=[REDACTED]",
+    "password=********",
+    "password=<removed>",
+    "password = readPassword()",
+    "if (password == expected) {",
+    "token: ghp_ is the prefix",
+    "postgresql://db.internal:5432/app",
+    "request_id=7f3a9c",
+  ]) {
+    assert.deepEqual(maskedValues(text), [], text);
+  }
+});
+
+test("a provider key in a password field is reported once, by its signature", () => {
+  const matches = scanForSecrets("STRIPE_SECRET=sk_test_1234567890abcdefghijklmnop");
+  assert.deepEqual(
+    matches.map((match) => match.kind),
+    ["stripe-key"],
+  );
+});

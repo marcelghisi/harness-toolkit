@@ -15,6 +15,58 @@ export const SIGNATURES: Record<string, RegExp> = {
   jwt: /\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\b/g,
 };
 
+/**
+ * hazard: a human-chosen password is low-entropy and has no provider shape, so `db_password=hunter2` and
+ * `postgresql://app:hunter2@db/app` passed through unmasked while every provider key beside them was caught —
+ * measured on a fixture set built to probe exactly this.
+ *
+ * invariant: only the value is masked, never the key or the host, so the agent still sees which field held a
+ * secret. A bare `key=value` must sit flush against its `=`: `password = readPassword()` is code, not a leak.
+ */
+const ASSIGNMENT_KEY =
+  "[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|auth[_-]?key|private[_-]?key)[A-Za-z0-9_.-]*";
+const QUOTED_ASSIGNMENT = new RegExp(
+  String.raw`(?<![A-Za-z0-9_])${ASSIGNMENT_KEY}["']?\s*[:=]\s*(["'])(?<value>[^"'\n]+)\1`,
+  "gid",
+);
+const FLUSH_ASSIGNMENT = new RegExp(
+  String.raw`(?<![A-Za-z0-9_])${ASSIGNMENT_KEY}=(?<value>[^\s"'&;,]+)`,
+  "gid",
+);
+const URL_CREDENTIAL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:(?<value>[^\s@/]+)@/dgi;
+
+// why: `${DATABASE_PASSWORD}`, `[REDACTED]`, `********` and `<removed>` are what a careful log already prints in
+// place of a secret. Masking them again would turn a negative control into a false positive.
+const PLACEHOLDER = /^(?:\$|<|\[|\*|%|\{|=)|^(?:null|none|undefined|true|false|redacted|changeme|xxx+)$/i;
+
+function isPlaceholder(value: string): boolean {
+  return PLACEHOLDER.test(value) || new Set(value).size === 1;
+}
+
+const ASSIGNMENT_PATTERNS: [string, RegExp][] = [
+  ["password-assignment", QUOTED_ASSIGNMENT],
+  ["password-assignment", FLUSH_ASSIGNMENT],
+  ["url-credential", URL_CREDENTIAL],
+];
+
+function assignmentMatches(text: string, existing: readonly SecretMatch[]): SecretMatch[] {
+  const matches: SecretMatch[] = [];
+  for (const [kind, pattern] of ASSIGNMENT_PATTERNS) {
+    for (const match of text.matchAll(new RegExp(pattern.source, pattern.flags))) {
+      const span = match.indices?.groups?.value;
+      const value = match.groups?.value;
+      if (!span || value === undefined || isPlaceholder(value)) {
+        continue;
+      }
+      const found = { start: span[0], end: span[1], kind };
+      if (![...existing, ...matches].some((other) => overlaps(found, other))) {
+        matches.push(found);
+      }
+    }
+  }
+  return matches;
+}
+
 // why: a run of the base64/hex/token alphabet, long enough to be worth an entropy check at all. Excluding `-` keeps
 // a dash-separated UUID out of this pattern entirely — each of its five segments is shorter than the minimum length
 // below, so it never reaches the entropy test in the first place.
@@ -91,6 +143,7 @@ export function scanForSecrets(text: string | undefined): SecretMatch[] {
     return [];
   }
   const signature = signatureMatches(text);
-  const entropy = entropyMatches(text, signature);
-  return [...signature, ...entropy].sort((a, b) => a.start - b.start);
+  const assignment = assignmentMatches(text, signature);
+  const entropy = entropyMatches(text, [...signature, ...assignment]);
+  return [...signature, ...assignment, ...entropy].sort((a, b) => a.start - b.start);
 }
