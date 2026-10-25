@@ -29,7 +29,7 @@ Source: `src/providers/claude/`.
 | `nativeLoopCounter` | `false` |
 | `dedicatedShellEvent` | `false` |
 | `toolInputRewrite` | `true` |
-| `toolOutputRewriteOn` | `["tool.after","tool.failure"]` |
+| `toolOutputRewriteOn` | `["tool.after","tool.failure","shell.after","mcp.after","edit.after"]` |
 | `contextAtToolBefore` | `true` |
 | `contextAtToolAfter` | `true` |
 | `contextAtStop` | `true` |

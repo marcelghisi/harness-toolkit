@@ -299,3 +299,27 @@ test("a payload without permission_mode leaves the field absent rather than defa
   });
   assert.equal(event?.permissionMode, undefined);
 });
+
+test("Bash and MCP after-events carry the tool's output, so the redaction rail can see what a command printed", () => {
+  const bash = claudeToEvent({
+    hook_event_name: "PostToolUse",
+    session_id: "s",
+    cwd: "/tmp",
+    tool_name: "Bash",
+    tool_input: { command: "cat app.log" },
+    tool_response: { stdout: "password=hunter2!", stderr: "", interrupted: false },
+  });
+  assert.equal(bash?.event, "shell.after");
+  assert.match(bash?.toolOutput ?? "", /password=hunter2!/);
+
+  const mcp = claudeToEvent({
+    hook_event_name: "PostToolUse",
+    session_id: "s",
+    cwd: "/tmp",
+    tool_name: "mcp__db__query",
+    tool_input: {},
+    tool_response: "row: token=abc",
+  });
+  assert.equal(mcp?.event, "mcp.after");
+  assert.equal(mcp?.toolOutput, "row: token=abc");
+});
