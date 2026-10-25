@@ -195,11 +195,16 @@ function columnsOf(rule: Line): Span[] {
 
 function sliceColumns(line: Line, columns: readonly Span[]): Cell[] {
   return columns.map((column, index) => {
-    const end = index + 1 < columns.length ? (columns[index + 1]?.start ?? line.text.length) : line.text.length;
+    const end =
+      index + 1 < columns.length ? (columns[index + 1]?.start ?? line.text.length) : line.text.length;
     const raw = line.text.slice(column.start, end);
     const lead = raw.length - raw.trimStart().length;
     const text = raw.trim();
-    return { text, start: line.start + column.start + lead, end: line.start + column.start + lead + text.length };
+    return {
+      text,
+      start: line.start + column.start + lead,
+      end: line.start + column.start + lead + text.length,
+    };
   });
 }
 

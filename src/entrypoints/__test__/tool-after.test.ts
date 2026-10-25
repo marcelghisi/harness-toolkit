@@ -866,7 +866,9 @@ test("a query result is pseudonymised the same way whether psql runs locally in 
       );
       assert.equal(outcome.decision.kind, "rewriteOutput", command);
       const output =
-        outcome.decision.kind === "rewriteOutput" ? `${outcome.decision.output}\n${outcome.decision.notice ?? ""}` : "";
+        outcome.decision.kind === "rewriteOutput"
+          ? `${outcome.decision.output}\n${outcome.decision.notice ?? ""}`
+          : "";
       assert.doesNotMatch(output, /Ana Souza/);
       assert.doesNotMatch(output, /ana\.souza/);
       assert.match(output, /\[PII:name:[0-9a-f]{8}\]/);
@@ -893,7 +895,9 @@ test("reading source code leaves field names and types alone, and only a literal
       ),
     );
     const output =
-      outcome.decision.kind === "rewriteOutput" ? `${outcome.decision.output}\n${outcome.decision.notice ?? ""}` : "";
+      outcome.decision.kind === "rewriteOutput"
+        ? `${outcome.decision.output}\n${outcome.decision.notice ?? ""}`
+        : "";
     assert.match(output, /type User = \{ name: string; email: string \};/);
     assert.match(output, /\[PII:email:[0-9a-f]{8}@gmail\.com\]/);
     assert.match(output, /\[PII-HYGIENE source-file\]/);
@@ -917,7 +921,9 @@ test("a secret and personal data in one output are both masked, each with its ow
       ),
     );
     const masked =
-      outcome.decision.kind === "rewriteOutput" ? `${outcome.decision.output}\n${outcome.decision.notice ?? ""}` : "";
+      outcome.decision.kind === "rewriteOutput"
+        ? `${outcome.decision.output}\n${outcome.decision.notice ?? ""}`
+        : "";
     assert.match(masked, /\[REDACTED:password-assignment:/);
     assert.match(masked, /\[PII:email:/);
     assert.match(masked, /\[SECRET-HYGIENE logged-credential\]/);
