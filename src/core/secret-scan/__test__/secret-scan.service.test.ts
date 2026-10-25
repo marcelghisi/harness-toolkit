@@ -130,3 +130,23 @@ test("a provider key in a password field is reported once, by its signature", ()
     ["stripe-key"],
   );
 });
+
+// hazard: a short or repetitive bearer token has neither a provider shape nor the entropy to be caught by either.
+test("an Authorization or API-key header credential is masked, the scheme and header name are not", () => {
+  const cases: [string, string][] = [
+    ["Authorization: Bearer fixture-token-aaaa", "fixture-token-aaaa"],
+    ["authorization: Basic Zml4dHVyZTpmaXh0dXJl", "Zml4dHVyZTpmaXh0dXJl"],
+    ["X-API-Key: fixture-key-0001", "fixture-key-0001"],
+    ['curl -H "Authorization: Token fixturetoken1"', "fixturetoken1"],
+  ];
+  for (const [text, value] of cases) {
+    assert.deepEqual(maskedValues(text), [value], text);
+  }
+  for (const text of [
+    "Authorization: Bearer [REDACTED]",
+    `Authorization: Bearer ${"$"}{TOKEN}`,
+    "a Bearer of news",
+  ]) {
+    assert.deepEqual(maskedValues(text), [], text);
+  }
+});

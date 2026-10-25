@@ -35,6 +35,16 @@ const FLUSH_ASSIGNMENT = new RegExp(
 );
 const URL_CREDENTIAL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:(?<value>[^\s@/]+)@/dgi;
 
+/**
+ * hazard: `Authorization: Bearer <token>` names no password key and separates with an unquoted `:`, so a short or
+ * repetitive token passed unmasked while the provider keys beside it were caught — measured on a fixture log.
+ *
+ * invariant: the scheme stays visible and only the credential is masked, so the agent still sees how a request
+ * authenticated.
+ */
+const AUTH_SCHEME = /\b(?:Bearer|Basic|Token|Digest)\s+(?<value>[A-Za-z0-9._~+/=-]{8,})/dg;
+const AUTH_HEADER = /\b(?:x-api-key|x-auth-token|api-key|x-access-token)\s*:\s*(?<value>[^\s"',;]{8,})/dgi;
+
 // why: `${DATABASE_PASSWORD}`, `[REDACTED]`, `********` and `<removed>` are what a careful log already prints in
 // place of a secret. Masking them again would turn a negative control into a false positive.
 const PLACEHOLDER = /^(?:\$|<|\[|\*|%|\{|=)|^(?:null|none|undefined|true|false|redacted|changeme|xxx+)$/i;
@@ -47,6 +57,8 @@ const ASSIGNMENT_PATTERNS: [string, RegExp][] = [
   ["password-assignment", QUOTED_ASSIGNMENT],
   ["password-assignment", FLUSH_ASSIGNMENT],
   ["url-credential", URL_CREDENTIAL],
+  ["auth-header", AUTH_SCHEME],
+  ["auth-header", AUTH_HEADER],
 ];
 
 function assignmentMatches(text: string, existing: readonly SecretMatch[]): SecretMatch[] {

@@ -329,7 +329,7 @@ change-approach follow-up. Trade-off: stops loops; can block intentional retries
 
 `secrets.redactOutput`, on by default. After a tool or shell command runs, its output is scanned for a
 recognised secret signature (AWS access key, GitHub/Slack/Stripe token, PEM private-key block, JWT), the value of
-a `password`/`secret`/`token`/`api_key` assignment or the password in a connection URL, or an unlabelled
+a `password`/`secret`/`token`/`api_key` assignment or the password in a connection URL, an `Authorization`/API-key header credential, or an unlabelled
 high-entropy string, and any match is replaced with a deterministic placeholder
 (`[REDACTED:<kind>:<hash>]`) before it reaches the model — the same value always yields the same placeholder
 within a session. On a host or event where a real rewrite is unsupported, the model instead gets a context
