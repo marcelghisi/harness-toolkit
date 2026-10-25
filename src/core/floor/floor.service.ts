@@ -320,7 +320,7 @@ function checkShellSecrets(segments: ShellSegment[], projectDir: string): Decisi
 function checkFile(input: FloorInput): Decision {
   const filePath = input.filePath;
   if (!filePath) {
-    return { kind: "allow" };
+    return unnamedRead(input);
   }
   const resolved = resolveTarget(input.projectDir, filePath);
 
@@ -346,6 +346,22 @@ function checkFile(input: FloorInput): Decision {
     );
   }
   return { kind: "allow" };
+}
+
+/**
+ * invariant: a read the floor cannot name is refused, not waved through. The path is the only thing this rule
+ * judges, so a read without one is a read it has not judged.
+ */
+function unnamedRead(input: FloorInput): Decision {
+  // why: a search with no path searches the working directory, which is a scope, not an unnamed file.
+  if (input.toolName === "Grep" || (input.toolName !== "Read" && input.isReadEvent !== true)) {
+    return { kind: "allow" };
+  }
+  return denial(
+    "secret-access",
+    "this read names no file path the harness can check, so whether it reads a credential cannot be established.",
+    "read with no path",
+  );
 }
 
 function checkSearchGlob(input: FloorInput): Decision {

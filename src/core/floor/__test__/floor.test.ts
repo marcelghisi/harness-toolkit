@@ -264,6 +264,15 @@ test("read.before is gated even when the tool name is unknown", () => {
   assert.equal(ruleOf(decision), "secret-access");
 });
 
+// invariant: a read the floor cannot name is a read it has not judged — refused, where a search scoped to the working
+// directory is not.
+test("a read with no path is refused, a path-less search is not", () => {
+  assert.equal(ruleOf(evaluateFloor({ projectDir: PROJECT, toolName: "Read" })), "secret-access");
+  assert.equal(ruleOf(evaluateFloor({ projectDir: PROJECT, isReadEvent: true })), "secret-access");
+  assert.equal(evaluateFloor({ projectDir: PROJECT, toolName: "Grep", isReadEvent: true }).kind, "allow");
+  assert.equal(evaluateFloor({ projectDir: PROJECT, toolName: "Write" }).kind, "allow");
+});
+
 test("writing a credential file is not a floor concern — only reading one is", () => {
   const decision = evaluateFloor({ projectDir: PROJECT, toolName: "Write", filePath: join(PROJECT, ".env") });
   assert.equal(decision.kind, "allow");

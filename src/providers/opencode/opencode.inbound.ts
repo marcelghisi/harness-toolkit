@@ -117,10 +117,14 @@ type EventField =
   | "spawnSubagentType"
   | "spawnModel";
 
+// hazard: a host that named the target anything but `path` reached the floor with no path, and a `.env` read was
+// allowed — measured on a session whose OpenCode was older than the one this provider was written against.
 const COMMON_FIELDS: readonly [string, EventField][] = [
   ["command", "command"],
   ["workdir", "cwd"],
   ["path", "filePath"],
+  ["filePath", "filePath"],
+  ["file_path", "filePath"],
 ];
 
 const FIELDS_BY_TOOL: Record<string, readonly [string, EventField][]> = {

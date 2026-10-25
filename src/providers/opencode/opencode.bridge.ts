@@ -130,7 +130,9 @@ export default {
       }
       for (const input of inputs) {
         const reply = await runHook("tool.execute.before", { ...base, input });
-        if (reply === null) {
+        // hazard: a runtime that did not recognise the event answered {} and the call went through — a reply
+        // that carries no action is an unanswered hook, not a yes.
+        if (reply === null || typeof reply.action !== "string") {
           if (CONFIG.hooks["tool.execute.before"].failClosed) {
             throw refusalFor(event.tool);
           }

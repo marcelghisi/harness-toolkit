@@ -10,8 +10,10 @@ function render(body: Record<string, unknown>): Rendered {
  */
 export function opencodeRender(decision: Decision, _event: HarnessEvent): Rendered {
   switch (decision.kind) {
+    // why: an explicit action, so the bridge can tell a handler that ran and had nothing to say from a bare `{}`,
+    // which only a runtime that did not recognise the event writes.
     case "abstain":
-      return { stdout: "{}", exitCode: 0 };
+      return render({ action: "abstain" });
     case "allow":
       return render({ action: "allow" });
     case "deny":
