@@ -22,6 +22,9 @@ export type ProviderInboundModule = {
   EVENT_KIND_BY_HOOK?: Record<string, HarnessEventKind>;
   PRE_TOOL_USE_FAN_OUT?: readonly ToolNameFanOutRule[];
   POST_TOOL_USE_FAN_OUT?: readonly ToolNameFanOutRule[];
+  // why: the fan-out tables were named after Claude's two hooks, and a host whose fan-out hooks are spelled
+  // otherwise would be documented under a hook name it never fires.
+  FAN_OUT_HOOK_NAMES?: { pre: string; post: string };
 };
 
 const CAPABILITY_FIELDS: readonly (keyof ProviderCapabilities)[] = [
@@ -62,13 +65,14 @@ export function renderEventMappingTable(mod: ProviderInboundModule): string {
     return ["| Hook | HarnessEventKind |", "|---|---|", ...rows].join("\n");
   }
 
+  const hookNames = mod.FAN_OUT_HOOK_NAMES ?? { pre: "PreToolUse", post: "PostToolUse" };
   const rows = [
     ...Object.entries(byHook).map(([hook, kind]) => `| \`${hook}\` | — | \`${kind}\` |`),
     ...(mod.PRE_TOOL_USE_FAN_OUT ?? []).map(
-      (rule) => `| \`PreToolUse\` | ${describeMatch(rule.match)} | \`${rule.kind}\` |`,
+      (rule) => `| \`${hookNames.pre}\` | ${describeMatch(rule.match)} | \`${rule.kind}\` |`,
     ),
     ...(mod.POST_TOOL_USE_FAN_OUT ?? []).map(
-      (rule) => `| \`PostToolUse\` | ${describeMatch(rule.match)} | \`${rule.kind}\` |`,
+      (rule) => `| \`${hookNames.post}\` | ${describeMatch(rule.match)} | \`${rule.kind}\` |`,
     ),
   ];
   return ["| Hook | Fan-out rule | HarnessEventKind |", "|---|---|---|", ...rows].join("\n");

@@ -1,0 +1,1 @@
+{"action":"deny","message":"FLOOR: reading .env would copy it into the transcript.\nrule=secret-access"}

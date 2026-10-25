@@ -1,0 +1,1 @@
+{"provider":"opencode","hook_event_name":"tool.execute.before","session_id":"ses_01","call_id":"call_1","tool":"shell","directory":"/work/repo","input":{"command":"cat .env","workdir":"/work/repo/sub"}}

@@ -1336,7 +1336,8 @@ export const TEST_ENV_IMPORT = ["--import", "./tools/test-env.mjs"];
  * ([/decisions/ad-102.md](/decisions/ad-102.md)).
  */
 // why: raised from 76 to 80 — knip cannot trace render-provider-docs.ts's dynamic import() of each provider's inbound module, so EVENT_KIND_BY_HOOK (both adapters) and Claude's PRE_TOOL_USE_FAN_OUT/POST_TOOL_USE_FAN_OUT report as unused though the drift gate depends on them.
-export const KNIP_EXPORTS_CEILING = 80;
+// why: raised from 80 to 84 for the same reason — the OpenCode adapter exports EVENT_KIND_BY_HOOK, both fan-out tables and FAN_OUT_HOOK_NAMES for that generator ([/decisions/ad-147.md](/decisions/ad-147.md)).
+export const KNIP_EXPORTS_CEILING = 84;
 
 export function buildTestSteps(): TestStep[] {
   return [

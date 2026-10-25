@@ -1,0 +1,1 @@
+{"provider":"opencode","hook_event_name":"tool.execute.before","session_id":"ses_01","call_id":"call_7","tool":"subagent","directory":"/work/repo","input":{"agent":"explore","description":"d","prompt":"p","model":"openrouter/x-fast"}}

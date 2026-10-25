@@ -1,0 +1,1 @@
+{"provider":"opencode","hook_event_name":"tool.execute.failed","session_id":"ses_01","call_id":"call_9","tool":"read","directory":"/work/repo","input":{"path":"missing.ts"},"output":"File not found"}

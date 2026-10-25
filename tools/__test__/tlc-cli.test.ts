@@ -564,8 +564,10 @@ describe("harness test — step plan and runner", () => {
      * invariant: a literal, and an inequality. Lowering the ceiling is free, which is the point; raising it fails
      * here, so it has to be argued for in a diff somebody reads.
      */
+    // why: raised to 84 for the four doc-generator exports of the OpenCode adapter
+    // ([/decisions/ad-147.md](/decisions/ad-147.md)).
     assert.ok(
-      KNIP_EXPORTS_CEILING <= 80,
+      KNIP_EXPORTS_CEILING <= 84,
       `the unused-export ceiling went up to ${KNIP_EXPORTS_CEILING}. Lowering it is free; raising it is a decision.`,
     );
 
