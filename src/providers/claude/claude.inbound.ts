@@ -1,6 +1,7 @@
 import { isEffortLevel } from "../../contracts/effort.ts";
 import type { EffortLevel, HarnessEvent, HarnessEventKind } from "../../contracts/index.ts";
 import { sanitizeSegment } from "../../platform/sanitize.ts";
+import { joinStreams, shellStreams } from "./claude.tool-output.ts";
 
 export const EVENT_KIND_BY_HOOK: Record<string, HarnessEventKind> = {
   SessionStart: "session.start",
@@ -101,7 +102,11 @@ function toolOutputOf(raw: Record<string, unknown>): string | undefined {
   if (toolOutput === undefined || toolOutput === null) {
     return undefined;
   }
-  return typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput);
+  if (typeof toolOutput === "string") {
+    return toolOutput;
+  }
+  const shell = shellStreams(toolOutput);
+  return shell ? joinStreams(shell.stdout, shell.stderr) : JSON.stringify(toolOutput);
 }
 
 function preToolUseKind(toolName: string | undefined): HarnessEventKind {

@@ -149,8 +149,13 @@ function redactSecrets(event: HarnessEvent, ctx: HandlerContext): Decision | nul
     attrs: { cause, kinds, subject, event: event.event },
   });
   const fresh = coreFacade.secretScan.adviseOnce(event.projectDir, event.sessionKey, `${cause}:${subject}`);
-  const advice = fresh ? `\n\n${coreFacade.secretScan.leakAdvice(cause, kinds, subject)}` : "";
-  return { kind: "rewriteOutput", output: `${masked}${advice}` };
+  return fresh
+    ? {
+        kind: "rewriteOutput",
+        output: masked,
+        notice: coreFacade.secretScan.leakAdvice(cause, kinds, subject),
+      }
+    : { kind: "rewriteOutput", output: masked };
 }
 
 export const toolAfterHandler: Handler = async (event: HarnessEvent, ctx: HandlerContext) => {

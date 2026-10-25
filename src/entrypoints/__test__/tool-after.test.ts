@@ -643,14 +643,18 @@ test("EFH-07/EFH-10: a secret-shaped tool.after output under Claude renders upda
     );
     assert.equal(outcome.decision.kind, "rewriteOutput");
     if (outcome.decision.kind === "rewriteOutput") {
-      assert.match(
-        outcome.decision.output,
-        /^AWS key: \[REDACTED:aws-access-key:[0-9a-f]{8}\]\n\n\[SECRET-HYGIENE other\] Grep exposed aws-access-key; /,
-      );
+      assert.match(outcome.decision.output, /^AWS key: \[REDACTED:aws-access-key:[0-9a-f]{8}\]$/);
+      assert.match(outcome.decision.notice ?? "", /^\[SECRET-HYGIENE other\] Grep exposed aws-access-key; /);
     }
     assert.ok(outcome.rendered.stdout);
-    const rendered = JSON.parse(outcome.rendered.stdout as string) as { updatedToolOutput: string };
-    assert.match(rendered.updatedToolOutput, /^AWS key: \[REDACTED:aws-access-key:[0-9a-f]{8}\]\n\n/);
+    const rendered = JSON.parse(outcome.rendered.stdout as string) as {
+      hookSpecificOutput: { updatedToolOutput: string; additionalContext: string };
+    };
+    assert.match(
+      rendered.hookSpecificOutput.updatedToolOutput,
+      /^AWS key: \[REDACTED:aws-access-key:[0-9a-f]{8}\]$/,
+    );
+    assert.match(rendered.hookSpecificOutput.additionalContext, /SECRET-HYGIENE/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -726,8 +730,9 @@ test("a password from the project's .env is masked in a log line, under the vari
     if (outcome.decision.kind === "rewriteOutput") {
       assert.match(
         outcome.decision.output,
-        /^INFO db connect password=\[REDACTED:env:DB_PASSWORD:[0-9a-f]{8}\]\n\n\[SECRET-HYGIENE other\]/,
+        /^INFO db connect password=\[REDACTED:env:DB_PASSWORD:[0-9a-f]{8}\]$/,
       );
+      assert.match(outcome.decision.notice ?? "", /^\[SECRET-HYGIENE other\]/);
       assert.doesNotMatch(outcome.decision.output, /hunter2/);
     }
   } finally {
@@ -776,10 +781,10 @@ test("a leak is advised once per session and subject, and recorded by cause with
     assert.equal(second.decision.kind, "rewriteOutput");
     if (first.decision.kind === "rewriteOutput" && second.decision.kind === "rewriteOutput") {
       assert.match(
-        first.decision.output,
+        first.decision.notice ?? "",
         /\[SECRET-HYGIENE logged-credential\] cat app\.log exposed env:DB_PASSWORD/,
       );
-      assert.doesNotMatch(second.decision.output, /SECRET-HYGIENE/);
+      assert.equal(second.decision.notice, undefined);
     }
     const masked = obsRecords(root).filter((record) => record.kind === "secret.masked");
     assert.equal(masked.length, 2);
@@ -793,6 +798,46 @@ test("a leak is advised once per session and subject, and recorded by cause with
     const rollup = coreFacade.observability.getRollup(root, "claude-sess-1");
     assert.equal(rollup?.secretsByCause?.["logged-credential"]?.count, 2);
     assert.deepEqual(rollup?.secretsByCause?.["logged-credential"]?.subjects, ["cat app.log"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// hazard: measured live — Bash answers an object, and a masked string sent back for it was dropped by Claude Code,
+// so the model read the values the mask had hidden.
+test("a Bash output object comes back masked in Bash's own shape, with the advice beside it", async () => {
+  const root = tempRoot();
+  try {
+    const outcome = await runHandler(
+      toolAfterHandler,
+      stdinOf(
+        claudeToolAfter(root, {
+          hook_event_name: "PostToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "cat logs/app.log" },
+          tool_response: {
+            stdout: "line one\nAWS key: AKIAABCDEFGHIJKLMNOP\n",
+            stderr: "warn: retry",
+            interrupted: false,
+            isImage: false,
+          },
+        }),
+      ),
+    );
+    const rendered = JSON.parse(outcome.rendered.stdout as string) as {
+      hookSpecificOutput: {
+        hookEventName: string;
+        updatedToolOutput: Record<string, unknown>;
+        additionalContext: string;
+      };
+    };
+    assert.equal(rendered.hookSpecificOutput.hookEventName, "PostToolUse");
+    const shaped = rendered.hookSpecificOutput.updatedToolOutput;
+    assert.match(String(shaped.stdout), /^line one\nAWS key: \[REDACTED:aws-access-key:[0-9a-f]{8}\]\n$/);
+    assert.equal(shaped.stderr, "warn: retry");
+    assert.equal(shaped.interrupted, false);
+    assert.equal(shaped.isImage, false);
+    assert.match(rendered.hookSpecificOutput.additionalContext, /SECRET-HYGIENE logged-credential/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -105,21 +105,47 @@ test("rewriteInput never leaks the reason field into rendered output", () => {
   assert.ok(rendered.stdout && !rendered.stdout.includes("should not appear"));
 });
 
-test("rewriteOutput renders a top-level updatedToolOutput field, not nested under hookSpecificOutput", () => {
+/**
+ * hazard: these used to assert a top-level `updatedToolOutput` string. Claude Code ignored it — measured live, a
+ * masked users query reached the model unmasked — because the hooks reference nests the field under
+ * `hookSpecificOutput` with `hookEventName`, in the tool's own output shape.
+ */
+test("rewriteOutput nests updatedToolOutput under hookSpecificOutput and puts the notice in additionalContext", () => {
   const decision: Decision = {
     kind: "rewriteOutput",
     output: "AWS creds: [REDACTED:aws-access-key:a1b2c3d4]",
+    notice: "[SECRET-HYGIENE other] advice",
   };
-  const rendered = claudeRender(decision, { ...TOOL_BEFORE_EVENT, event: "tool.after" });
+  const event = {
+    ...TOOL_BEFORE_EVENT,
+    event: "tool.after" as const,
+    raw: { tool_response: "AWS creds: x" },
+  };
+  const rendered = claudeRender(decision, event);
   assert.equal(rendered.stdout, golden("rewrite-output"));
-  assert.ok(rendered.stdout && !rendered.stdout.includes("hookSpecificOutput"));
 });
 
-test("rewriteOutput at tool.failure also renders updatedToolOutput", () => {
-  const decision: Decision = { kind: "rewriteOutput", output: "masked" };
-  const rendered = claudeRender(decision, { ...TOOL_BEFORE_EVENT, event: "tool.failure" });
-  assert.ok(rendered.stdout);
-  assert.equal(JSON.parse(rendered.stdout as string).updatedToolOutput, "masked");
+test("a Bash output is rebuilt in Bash's own shape, stdout and stderr apart", () => {
+  const raw = { tool_response: { stdout: "a", stderr: "b", interrupted: false, isImage: false } };
+  const decision: Decision = { kind: "rewriteOutput", output: "A\n\u0000stderr\u0000\nB" };
+  const rendered = claudeRender(decision, { ...TOOL_BEFORE_EVENT, event: "shell.after", raw });
+  const parsed = JSON.parse(rendered.stdout as string) as { hookSpecificOutput: Record<string, unknown> };
+  assert.equal(parsed.hookSpecificOutput.hookEventName, "PostToolUse");
+  assert.deepEqual(parsed.hookSpecificOutput.updatedToolOutput, {
+    stdout: "A",
+    stderr: "B",
+    interrupted: false,
+    isImage: false,
+  });
+});
+
+test("an output whose shape cannot be rebuilt says so instead of sending a replacement that would be ignored", () => {
+  const raw = { tool_response: { content: [{ type: "text" }] } };
+  const decision: Decision = { kind: "rewriteOutput", output: "not json", notice: "advice" };
+  const rendered = claudeRender(decision, { ...TOOL_BEFORE_EVENT, event: "tool.after", raw });
+  const parsed = JSON.parse(rendered.stdout as string) as { hookSpecificOutput: Record<string, unknown> };
+  assert.equal(parsed.hookSpecificOutput.updatedToolOutput, undefined);
+  assert.match(String(parsed.hookSpecificOutput.additionalContext), /could not be masked[\s\S]*advice/);
 });
 
 test("hookEventName reflects the originating event for every fanned-out kind", () => {
