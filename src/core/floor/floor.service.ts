@@ -1,6 +1,7 @@
 import type { Decision } from "../../contracts/decision.ts";
 import { isInside, isProtectedWiringTarget, isScratch, isSecretPath, resolveTarget } from "./floor.paths.ts";
 import { checkPolicySurface } from "./floor.policy-surface.ts";
+import { inlineProgramSecret, SECRET_READERS, storedSecretCommand } from "./floor.secrets.ts";
 import { type ShellSegment, type ShellWord, tokenizeShell } from "./floor.tokenize.ts";
 import { verbOf } from "./floor.verb.ts";
 
@@ -25,7 +26,6 @@ export type FloorInput = {
 
 const DESTRUCTIVE_VERBS = new Set(["dd", "rm", "rmdir", "shred", "truncate"]);
 const MACHINE_VERBS = new Set(["halt", "poweroff", "reboot", "shutdown"]);
-const READER_VERBS = new Set(["base64", "cat", "head", "less", "more", "od", "strings", "tail", "xxd"]);
 const READING_TOOLS = new Set(["Read", "Edit", "MultiEdit", "NotebookEdit"]);
 // why: the spec's own AC3 names these three tool calls, not the wider WRITE_TOOLS set (which also carries
 // `Delete`/`NotebookEdit`) — a provider's wiring target is a settings/hooks document, never a notebook.
@@ -296,24 +296,48 @@ function checkShellSecrets(segments: ShellSegment[], projectDir: string): Decisi
         );
       }
     }
-    if (!READER_VERBS.has(head.verb)) {
-      continue;
-    }
-    for (const word of pathArgs(head.args)) {
-      if (word.unresolved) {
-        continue;
-      }
-      const resolved = resolveTarget(projectDir, word.text);
-      if (isSecretPath(resolved)) {
-        return denial(
-          "secret-access",
-          `\`${head.verb}\` would read ${resolved} into the transcript. Credentials do not belong in an agent's context.`,
-          `read of ${resolved}`,
-        );
-      }
+    const secret = secretReadBy(head.verb, head.args, projectDir);
+    if (secret) {
+      return secret;
     }
   }
   return { kind: "allow" };
+}
+
+function secretReadBy(verb: string, args: ShellWord[], projectDir: string): Decision | null {
+  const stored = storedSecretCommand(verb, args);
+  if (stored !== null) {
+    return denial(
+      "secret-access",
+      `\`${stored}\` prints a stored secret, and it would land in the transcript. Run it in your own terminal, or let the program read the secret at runtime.`,
+      `${stored}`,
+    );
+  }
+  const inline = inlineProgramSecret(verb, args, projectDir);
+  if (inline !== null) {
+    return denial(
+      "secret-access",
+      `The \`${verb}\` program on this command line opens ${inline}, which would copy credentials into the transcript.`,
+      `read of ${inline}`,
+    );
+  }
+  if (!SECRET_READERS.has(verb)) {
+    return null;
+  }
+  for (const word of pathArgs(args)) {
+    if (word.unresolved) {
+      continue;
+    }
+    const resolved = resolveTarget(projectDir, word.text);
+    if (isSecretPath(resolved)) {
+      return denial(
+        "secret-access",
+        `\`${verb}\` would read ${resolved} into the transcript. Credentials do not belong in an agent's context.`,
+        `read of ${resolved}`,
+      );
+    }
+  }
+  return null;
 }
 
 function checkFile(input: FloorInput): Decision {

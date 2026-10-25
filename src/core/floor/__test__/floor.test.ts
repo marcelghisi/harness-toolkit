@@ -422,3 +422,74 @@ test("AC5 a local search for the literal address is allowed", () => {
     assert.equal(evaluateFloor({ projectDir: "/repo", command }).kind, "allow", command);
   }
 });
+
+test("every verb that prints a file is a reader, so grep, sed, awk and friends cannot print .env either", () => {
+  for (const command of [
+    "grep . .env",
+    "grep -i password .env.local",
+    "sed -n p .env",
+    "awk 1 .env",
+    "sort .env",
+    "jq . credentials",
+    "rg TOKEN .env",
+    `grep -r key ${join(HOME, ".aws")}`,
+  ]) {
+    assertDenied(command, "secret-access");
+  }
+});
+
+test("a pattern or script operand is not a file, so ordinary searches stay allowed", () => {
+  for (const command of [
+    "grep -rn PASSWORD src",
+    "grep -r TODO .",
+    "sed -i 's/password/secret/' src/config.ts",
+    "awk '{print $1}' app.log",
+    "sort .env.example",
+    "diff .env.example .env.sample",
+  ]) {
+    assertAllowed(command);
+  }
+});
+
+test("an inline program that names a secret path is refused; one that does not is allowed", () => {
+  assertDenied(`python3 -c "print(open('.env').read())"`, "secret-access");
+  assertDenied(`node -e "console.log(require('fs').readFileSync('.env','utf8'))"`, "secret-access");
+  assertDenied(`ruby -e "puts File.read('${join(HOME, ".ssh", "id_ed25519")}')"`, "secret-access");
+  assertAllowed(`python3 -c "import json; print(json.dumps({'a': 1}))"`);
+  assertAllowed(`node -e "console.log(process.version)"`);
+  assertAllowed("python3 script.py .env");
+});
+
+test("a command whose job is to print a stored secret is refused; its harmless subcommands are not", () => {
+  for (const command of [
+    "isys vault get litellm/api-key",
+    "op read op://vault/item/password",
+    "op item get github --fields password",
+    "security find-generic-password -s api -w",
+    "kubectl get secret db-creds -o yaml",
+    "aws secretsmanager get-secret-value --secret-id prod/db",
+    "aws ssm get-parameter --name /db/pass --with-decryption",
+    "gcloud secrets versions access latest --secret=db",
+    "vault kv get secret/db",
+    "az keyvault secret show --vault-name kv --name db",
+    "gh auth token",
+    "pass show work/db",
+    "keepassxc-cli show vault.kdbx db",
+    "doppler secrets get DB_PASSWORD",
+    "heroku config:get DATABASE_URL",
+  ]) {
+    assertDenied(command, "secret-access");
+  }
+  for (const command of [
+    "isys vault list",
+    "op signin",
+    "security find-generic-password -s api",
+    "kubectl get secrets",
+    "kubectl get pods -o yaml",
+    "aws ssm get-parameter --name /app/region",
+    "vault status",
+    "gh auth status",
+  ]) {
+    assertAllowed(command);
+  }
+});
