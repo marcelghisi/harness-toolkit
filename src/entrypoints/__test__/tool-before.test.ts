@@ -82,6 +82,31 @@ test("paused, the floor still refuses a shell write to the policy surface", asyn
   }
 });
 
+// hazard: Claude Code's `Grep` names its target `path`, not `file_path`, so a search pointed at `.env` reached the
+// floor with no path and was allowed.
+test("a Grep tool call on a credential file or glob is refused by the floor", async () => {
+  const root = tempRoot();
+  try {
+    for (const toolInput of [
+      { pattern: "KEY", path: ".env", output_mode: "content" },
+      { pattern: "KEY", glob: ".env*", output_mode: "content" },
+    ]) {
+      const payload = JSON.stringify({
+        hook_event_name: "PreToolUse",
+        cwd: root,
+        session_id: "sess-1",
+        tool_name: "Grep",
+        tool_input: toolInput,
+      });
+      const outcome = await runHandler(toolBeforeHandler, stdinOf(payload), floorVerdict);
+      assert.equal(outcome.decision.kind, "deny", JSON.stringify(toolInput));
+      assert.match(outcome.decision.kind === "deny" ? outcome.decision.reason : "", /rule=secret-access/);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("paused, an ordinary shell command passes without the rails", async () => {
   const root = tempRoot();
   try {

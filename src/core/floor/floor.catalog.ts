@@ -28,7 +28,7 @@ export const FLOOR_RULES: Record<FloorRule, FloorRuleDoc> = {
   },
   "secret-access": {
     denies:
-      "a read that would copy a credential into the transcript — `.env`, `~/.ssh`, `~/.aws`, `*.pem` and similar through any verb that prints a file (`cat`, `grep`, `sed`, `awk`, `jq`, …), an inline `python -c`/`node -e` program that names one, or the editor's own read tool; a command whose job is to print a stored secret (`op read`, `vault kv get`, `kubectl get secret -o`, `gh auth token`, …); and the instance metadata service through any verb that speaks to the network",
+      "a read that would copy a credential into the transcript — `.env`, `~/.ssh`, `~/.aws`, `*.pem` and similar through any verb that prints a file (`cat`, `grep`, `sed`, `awk`, `jq`, …), an inline `python -c`/`node -e`/`bash -c` or awk program that names one, a `<` redirect or `$(…)` substitution, `git show`/`diff`/`log -p`, a copy under an ordinary name, the editor's read and search tools, or a read that names no path; a command whose job is to print a stored secret (`op read`, `vault kv get`, `kubectl get secret -o`, `gh auth token`, …); and the instance metadata service through any verb that speaks to the network",
     allows:
       "a pattern, script or recursive search that names no secret file (`grep -rn PASSWORD src`), the same tools' harmless subcommands (`op signin`, `kubectl get secrets`), and searching local files for the metadata address",
   },

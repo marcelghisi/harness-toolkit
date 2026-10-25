@@ -164,6 +164,82 @@ test("reading credentials into the transcript is denied", () => {
   assertDenied("cat deploy.pem", "secret-access");
 });
 
+/**
+ * hazard: only `cat` and eight of its kin were readers, so each of these printed a `.env` that `cat .env` was
+ * refused for — measured on a live session, where the agent's own restraint was the only thing in the way.
+ */
+test("every verb that prints a credential file is denied, not only cat", () => {
+  for (const command of [
+    "grep -n FAKE .env",
+    "grep -e FAKE .env.local",
+    "egrep KEY .env",
+    "rg KEY .env",
+    "sed -n p .env",
+    "awk 1 .env",
+    "cut -d= -f2 .env",
+    "sort .env",
+    "nl .env",
+    "diff .env .env.example",
+    "jq . .env.json",
+    `python3 -c "print(open('.env').read())"`,
+    `node -e "console.log(require('fs').readFileSync('.env','utf8'))"`,
+    `awk 'BEGIN { while ((getline l < ".env") > 0) print l }'`,
+    `bash -c "cat .env"`,
+    "python3 < .env",
+    "while read l; do echo $l; done < .env",
+    'echo "$(cat .env)"',
+    "git diff .env",
+    "git show HEAD:.env",
+    "git log -p .env",
+    "cp .env leak.txt",
+    "ln -s .env visible.txt",
+  ]) {
+    assertDenied(command, "secret-access");
+  }
+});
+
+// invariant: naming a credential file is not reading it. A floor with no switch that refused these would block
+// setting a project up.
+test("commands that name a credential file without printing it stay allowed", () => {
+  for (const command of [
+    "ls -la .env",
+    "test -f .env",
+    "stat .env",
+    "touch .env",
+    "cp .env.example .env",
+    "cp .env .env.bak",
+    "git add .env.example",
+    "git check-ignore .env",
+    "git log --oneline .env",
+    "docker compose --env-file .env up",
+    "grep -rn credentials src",
+    "grep -rn FAKE .",
+    "npm run credentials",
+    "python3 -c \"print('hello')\"",
+  ]) {
+    assertAllowed(command);
+  }
+});
+
+test("the refusal tells the agent that a prompt `!` command is not a private channel", () => {
+  const decision = shell("cat .env");
+  assert.equal(decision.kind, "deny");
+  assert.match(decision.kind === "deny" ? decision.reason : "", /`! cat`[^.]*same conversation/);
+});
+
+test("the Grep tool is gated on a credential path and on a glob that selects one", () => {
+  const byPath = evaluateFloor({ projectDir: PROJECT, toolName: "Grep", filePath: ".env" });
+  assert.equal(ruleOf(byPath), "secret-access");
+  for (const searchGlob of [".env", ".env*", "**/.env.*", "*.pem", "{.env,README.md}"]) {
+    const byGlob = evaluateFloor({ projectDir: PROJECT, toolName: "Grep", searchGlob });
+    assert.equal(ruleOf(byGlob), "secret-access", searchGlob);
+  }
+  for (const searchGlob of ["*.ts", "**/*.md", "!.env*", ".env.example"]) {
+    const decision = evaluateFloor({ projectDir: PROJECT, toolName: "Grep", searchGlob });
+    assert.equal(decision.kind, "allow", searchGlob);
+  }
+});
+
 test("env templates are not secrets", () => {
   assertAllowed("cat .env.example");
   assertAllowed("cat .env.sample");
@@ -186,6 +262,15 @@ test("read.before is gated even when the tool name is unknown", () => {
     isReadEvent: true,
   });
   assert.equal(ruleOf(decision), "secret-access");
+});
+
+// invariant: a read the floor cannot name is a read it has not judged — refused, where a search scoped to the working
+// directory is not.
+test("a read with no path is refused, a path-less search is not", () => {
+  assert.equal(ruleOf(evaluateFloor({ projectDir: PROJECT, toolName: "Read" })), "secret-access");
+  assert.equal(ruleOf(evaluateFloor({ projectDir: PROJECT, isReadEvent: true })), "secret-access");
+  assert.equal(evaluateFloor({ projectDir: PROJECT, toolName: "Grep", isReadEvent: true }).kind, "allow");
+  assert.equal(evaluateFloor({ projectDir: PROJECT, toolName: "Write" }).kind, "allow");
 });
 
 test("writing a credential file is not a floor concern — only reading one is", () => {
