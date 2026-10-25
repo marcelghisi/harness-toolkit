@@ -735,7 +735,9 @@ test("a password from the project's .env is masked in a log line, under the vari
   }
 });
 
-test("secrets.knownValues false stops reading .env, and the weak password passes as before", async () => {
+// why: with `knownValues` off the hook must not read `.env`. The pattern detector still masks a `password=` value on
+// its own, so the test checks which detector fired, not that the value leaks.
+test("secrets.knownValues false stops reading .env, and only the pattern detector masks the password", async () => {
   const root = tempRoot();
   try {
     writeFileSync(join(root, ".env"), "DB_PASSWORD=hunter2!\n");
@@ -750,7 +752,10 @@ test("secrets.knownValues false stops reading .env, and the weak password passes
         claudeToolAfter(root, { tool_name: "Bash", tool_response: "INFO db connect password=hunter2!" }),
       ),
     );
-    assert.equal(outcome.decision.kind, "abstain");
+    assert.equal(outcome.decision.kind, "rewriteOutput");
+    const output = outcome.decision.kind === "rewriteOutput" ? outcome.decision.output : "";
+    assert.doesNotMatch(output, /REDACTED:env:/);
+    assert.match(output, /password=\[REDACTED:password-assignment:/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

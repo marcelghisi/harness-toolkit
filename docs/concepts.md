@@ -328,8 +328,10 @@ change-approach follow-up. Trade-off: stops loops; can block intentional retries
 ## secret redaction
 
 `secrets.redactOutput`, on by default. After a tool or shell command runs, its output is scanned for a
-recognised secret signature (AWS access key, GitHub/Slack/Stripe token, PEM private-key block, JWT) or an
-unlabelled high-entropy string, and any match is replaced with a deterministic placeholder
+recognised secret signature (AWS access key, GitHub/Slack/Stripe token, PEM private-key block — even one printed
+without its END line — JWT), the value of a `password`/`secret`/`token`/`api_key` assignment, the password in a
+connection URL, an `Authorization`/API-key header credential, or an unlabelled high-entropy string (its `NAME=`
+prefix left visible), and any match is replaced with a deterministic placeholder
 (`[REDACTED:<kind>:<hash>]`) before it reaches the model — the same value always yields the same placeholder
 within a session. On a host or event where a real rewrite is unsupported, the model instead gets a context
 notice that a secret was masked and must not be repeated; the raw value already reached it there, which is a
