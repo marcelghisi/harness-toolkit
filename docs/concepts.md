@@ -354,6 +354,51 @@ the masked output with the fix: never log a credential at any level, debug inclu
 length, source, an HMAC fingerprint) instead. `tlc harness obs report` lists every masked secret by cause in a
 **Secret hygiene** section, with variable names and where they surfaced, never values.
 
+## personal data (PII)
+
+`pii.redactOutput` and `pii.blockWrites`, both on by default ([/decisions/ad-151.md](/decisions/ad-151.md)).
+
+**What counts** is the project's own definition, in `.tlc/harness/pii.json`, which is policy: an agent cannot write
+it, and an out-of-band edit trips the baseline check.
+
+```json
+{
+  "extends": ["id:br", "id:us", "id:es", "lang:pt", "lang:es", "domain:finance"],
+  "fields": ["cliente_nome", { "name": "tenant", "kind": "tenant", "mode": "mask" }],
+  "patterns": [{ "kind": "member", "regex": "MBR-\\d{16}", "validate": "luhn" }],
+  "fixtures": { "domains": ["e2e.test"], "paths": ["backups/e2e/**"] },
+  "keep": ["email-domain", "phone-country", "card-last4"]
+}
+```
+
+Packs come on three axes:
+- `id:<country>`: documents and their checksums;
+- `lang:<language>`: field names;
+- `domain:<sector>`: sector fields. `health` and `special`, the GDPR art. 9 / LGPD sensitive categories, are masked
+  with no visible attribute.
+
+`global` (mailbox, E.164 phone, card, IBAN, English field names) is always on. With no file, every checksummed
+`id:` pack and every `lang:` pack applies. `tlc harness pii suggest` proposes a template from the schema files and
+locale folders, and `tlc harness pii test <file|->` shows what would be pseudonymised, by line and kind, never values.
+
+**What the model reads.** Each personal value becomes `[PII:<kind>:<id>]`, for example `[PII:email:a1b2c3d4@gmail.com]`
+or `[PII:card:e5f60718:visa…4242]`. The id is a keyed hash with a per-machine salt, so it is the same for the same
+value in every session and cannot be recomputed from the value. Counts, joins and duplicates survive; the values do
+not.
+
+A `docker compose exec db psql` on a laptop is treated exactly like a `psql` on a server. Personal data in a query or
+an API result is expected, and the advice says to aggregate in the query or a script. In a log, a source file or a
+config it is a defect, and the advice says how to fix it at the origin. In a source file only self-proving shapes
+are matched, so code stays readable.
+
+**What a turn writes.** At stop, the lines a turn added are checked. A real mailbox, a valid document or a real card
+in code, a comment, a config or a log sends the turn back with `file:line (kind)`. A reserved domain (`example.com`,
+`.invalid`, `.test`), an invalid-checksum document or an issuer test card is a fixture and passes. A token this
+session handed out cannot be written back into a file (`pii-placeholder-write`).
+
+**On disk**, audit and obs records carry `[PII:<kind>]`. `tlc harness obs report` lists a **PII exposure** section
+by source, and turning either switch off records `pii.disabled` at session start.
+
 ## intelligence (rails)
 
 | Key | Effect |

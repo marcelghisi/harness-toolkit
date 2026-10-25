@@ -39,7 +39,7 @@
 <p align="center">
   Hooks fire on the editor's own events. The harness answers each one with a decision — <b>allow</b>, <b>ask</b>,
   <b>deny</b>, or text injected into the turn — and writes a record of what it decided and why.
-  <b>8 floor rules</b> no configuration can reach, <b>3 always-on checks</b>, and <b>24 rails</b> you choose.
+  <b>8 floor rules</b> no configuration can reach, <b>3 always-on checks</b>, and <b>28 rails</b> you choose.
 </p>
 
 - **[Everything it validates](#everything-it-validates)** — the whole list, one row per check
@@ -92,9 +92,9 @@ Three tiers, and which tier a check is in decides whether you can turn it off.
 |------|-------|--------------|------|
 | [Floor](#tier-1--the-floor-no-configuration-reaches-it) | 8 rules | Never | Before any policy is loaded, on every tool call, shell command and read |
 | [Always on](#tier-2--always-on-no-switch) | 3 checks | Never | After the floor, on every acting event |
-| [Rails](#tier-3--the-rails-you-choose) | 26 capabilities | Each one, individually | Where the table says |
+| [Rails](#tier-3--the-rails-you-choose) | 28 capabilities | Each one, individually | Where the table says |
 
-Nothing else runs. If a message on your screen is not from one of the thirty-seven rows below, it is not the
+Nothing else runs. If a message on your screen is not from one of the thirty-nine rows below, it is not the
 harness.
 
 ### Tier 1 — the floor, no configuration reaches it
@@ -137,7 +137,7 @@ otherwise switch off.
 
 ### Tier 3 — the rails you choose
 
-All 26 are off unless the **default** column says `on`, and each was presented with its benefit and its
+All 28 are off unless the **default** column says `on`, and each was presented with its benefit and its
 trade-off when you ran the init wizard. `configPath` is the key in `.tlc/harness/config.json`.
 
 <!-- generated:validates -->
@@ -170,6 +170,8 @@ trade-off when you ran the init wizard. `configPath` is the key in `.tlc/harness
 | **Operator rules (your trigger, your proof)**<br>`rules.enabled` · off | Reads the rules you declare in markdown and enforces them: on this trigger, this must have happened. | `tool.before`<br>`stop` | `deny` | tlc harness doctor — each active rule, its tier, and any proof kind never observed here |
 | **Secret redaction (tool/shell output)**<br>`secrets.redactOutput` · **on** | Scans a tool's or shell command's output for a secret-shaped signature or high-entropy span and masks it. | `tool.after` | `context` | the masked placeholder itself, in the tool output — `[REDACTED:<kind>:<hash>]` |
 | **Known-value secret masking (tool/shell output)**<br>`secrets.knownValues` · **on** | Masks every exact occurrence of a secret value the hook knows — from its environment and the project's .env files. | `tool.after` | `context` | the masked placeholder itself, in the tool output — `[REDACTED:env:<VARIABLE>:<hash>]` |
+| **PII pseudonymisation (tool/shell output)**<br>`pii.redactOutput` · **on** | Replaces personal data in query rows, API responses, logs and files with a stable pseudonym, per the project's template. | `tool.after` | `context` | the pseudonym itself, in the tool output — `[PII:<kind>:<id>]`; `tlc harness obs report` — PII exposure by source |
+| **PII write gate (no personal data in the repository)**<br>`pii.blockWrites` · **on** | Sends the turn back when the lines it added carry personal data — in code, comments, config or logs. | `stop` | `block-stop` | the stop follow-up — `[PII-HYGIENE written]` with file:line:kind; `tlc harness obs report` — PII exposure, row `written` |
 
 <!-- /generated -->
 
