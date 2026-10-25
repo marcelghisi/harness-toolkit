@@ -13,6 +13,10 @@ Generated from `docs/decisions/` — do not edit by hand. Run `node tools/render
 A reserved file of the [OKF v0.1](/decisions/ad-013.md) bundle: entries grouped under ISO 8601 headings,
 newest first. For what landed in which npm release, see `CHANGELOG.md` at the repository root.
 
+## 2026-10-25
+
+- **AD-148** — known secret values are masked by value, a masked placeholder cannot be written back, and Bash output reaches the mask ([/decisions/ad-148.md](/decisions/ad-148.md))
+
 ## 2026-10-24
 
 - **AD-146** — gates are verdicts about a tree; hooks read them and never wait for a suite ([/decisions/ad-146.md](/decisions/ad-146.md))
