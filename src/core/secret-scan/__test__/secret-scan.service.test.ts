@@ -150,3 +150,25 @@ test("an Authorization or API-key header credential is masked, the scheme and he
     assert.deepEqual(maskedValues(text), [], text);
   }
 });
+
+// hazard: the entropy token swallowed `NAME=`, so the key name was masked and the value hashed differently than alone.
+test("an entropy match after NAME= masks the value only, so the placeholder matches the bare value's", () => {
+  const value = "Q7vX9pL2mZ8rT4wK1nB6yH3cF5";
+  assert.deepEqual(maskedValues(`SOME_SETTING=${value}`), [value]);
+  assert.deepEqual(maskedValues(value), [value]);
+  assert.deepEqual(maskedValues("ENCRYPTION_KEY=fixture-encryption"), ["fixture-encryption"]);
+});
+
+// hazard: `grep -n` printed the BEGIN line and the body without the END, and the body went through unmasked.
+test("an unterminated PEM block masks the base64 body that follows, with or without a grep -n prefix", () => {
+  const body = "RkFLRS1LRVktTk9ULUEtVkFMSUQtUFJJVkFURS1LRVk=";
+  for (const text of [
+    `8:PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n9:${body}`,
+    `logs/env.log:8:-----BEGIN RSA PRIVATE KEY-----\nlogs/env.log:9:${body}`,
+    `-----BEGIN PRIVATE KEY-----\n${body}`,
+  ]) {
+    const masked = maskedValues(text);
+    assert.equal(masked.length, 1, text);
+    assert.ok(masked[0]?.includes(body), text);
+  }
+});

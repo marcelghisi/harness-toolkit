@@ -11,7 +11,11 @@ export const SIGNATURES: Record<string, RegExp> = {
   "github-token": /\bgh[pousr]_[A-Za-z0-9]{36}\b/g,
   "slack-token": /\bxox[baprs]-[0-9A-Za-z-]{10,72}\b/g,
   "stripe-key": /\bsk_(?:live|test)_[A-Za-z0-9]{24,}\b/g,
-  "pem-private-key": /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+  // hazard: `grep -n` or `head` can print the BEGIN line and the body without the END, and a block that had to be
+  // terminated to match let the body through. An unterminated block masks the base64 lines that follow it, with or
+  // without a `file:line:` prefix.
+  "pem-private-key":
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|(?:\r?\n(?:[\w./-]*:)?(?:\d+[:-])?[A-Za-z0-9+/]{16,}={0,2})*)/g,
   jwt: /\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\b/g,
 };
 
@@ -24,7 +28,7 @@ export const SIGNATURES: Record<string, RegExp> = {
  * secret. A bare `key=value` must sit flush against its `=`: `password = readPassword()` is code, not a leak.
  */
 const ASSIGNMENT_KEY =
-  "[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|auth[_-]?key|private[_-]?key)[A-Za-z0-9_.-]*";
+  "[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|auth[_-]?key|private[_-]?key|encryption[_-]?key|signing[_-]?key|master[_-]?key|hmac[_-]?key|session[_-]?key|client[_-]?key)[A-Za-z0-9_.-]*";
 const QUOTED_ASSIGNMENT = new RegExp(
   String.raw`(?<![A-Za-z0-9_])${ASSIGNMENT_KEY}["']?\s*[:=]\s*(["'])(?<value>[^"'\n]+)\1`,
   "gid",
@@ -135,14 +139,19 @@ function entropyMatches(text: string, existing: readonly SecretMatch[]): SecretM
     if (match.index === undefined) {
       continue;
     }
-    const span = { start: match.index, end: match.index + match[0].length };
+    // hazard: `_` and `=` are in the token alphabet, so `ENCRYPTION_KEY=<value>` was one token and the key name was
+    // masked with it — the line stopped being a KEY=value, and the same value hashed to a different placeholder
+    // than where it matched alone.
+    const name = /^[A-Za-z_][A-Za-z0-9_]*=/.exec(match[0])?.[0] ?? "";
+    const value = match[0].slice(name.length);
+    const span = { start: match.index + name.length, end: match.index + match[0].length };
     if (existing.some((existingMatch) => overlaps(span, existingMatch))) {
       continue;
     }
     if (span.end - span.start < ENTROPY_MIN_LENGTH) {
       continue;
     }
-    if (shannonEntropy(match[0]) > ENTROPY_THRESHOLD) {
+    if (shannonEntropy(value) > ENTROPY_THRESHOLD) {
       matches.push({ ...span, kind: "entropy" });
     }
   }
