@@ -10,6 +10,7 @@ doctor reports against your own configuration.
 
 - **AD-148** — known secret values are masked by value, a masked placeholder cannot be written back, and Bash output reaches the mask
 - **AD-149** — a masked secret names its cause, advises the fix once, is counted in the session report, and never reaches disk
+- **AD-150** — secret-access covers every verb that prints a file, inline programs, and commands that print a stored secret
 
 ## v0.16.8
 
