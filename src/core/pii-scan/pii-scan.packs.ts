@@ -72,6 +72,10 @@ const EN_LABELS: Record<string, string> = {
   ip_address: "ip",
   client_ip: "ip",
   remote_ip: "ip",
+  // why: the address a person signed in or signed up from; a bare `ip` column is a pod's or a host's as often.
+  login_ip: "ip",
+  user_ip: "ip",
+  signup_ip: "ip",
 };
 
 export const PACKS: readonly PiiPack[] = [

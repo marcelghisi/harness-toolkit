@@ -6,7 +6,14 @@ import { test } from "node:test";
 import { piiTemplatePath } from "../../../platform/paths.ts";
 import { DEFAULT_PACKS } from "../pii-scan.packs.ts";
 import { scanForPii } from "../pii-scan.service.ts";
-import { compilePiiTemplate, loadPiiTemplate, normalizeLabel } from "../pii-scan.template.ts";
+import {
+  compilePiiTemplate,
+  loadPiiTemplate,
+  loadPiiTemplateFor,
+  normalizeLabel,
+  otherTemplateRoots,
+  stricterOf,
+} from "../pii-scan.template.ts";
 import { cpf, luhnComplete } from "./pii-fixtures.ts";
 
 test("field names fold case, separators, camelCase and accents to one spelling", () => {
@@ -82,4 +89,49 @@ test("the template file is read from the project, and invalid JSON falls back to
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+function projectWith(template: object | null): string {
+  const dir = mkdtempSync(join(tmpdir(), "pii-root-"));
+  if (template !== null) {
+    mkdirSync(join(dir, ".tlc", "harness"), { recursive: true });
+    writeFileSync(join(dir, ".tlc", "harness", "pii.json"), JSON.stringify(template));
+  }
+  return dir;
+}
+
+// why: measured — a session in one repository ran `cd ../demo && curl …` and the demo's template was never read.
+test("a command that moves into another project reads that project's template too", () => {
+  const session = projectWith(null);
+  const demo = projectWith({ fields: ["billing_zip_code_x"] });
+  const command = `cd ${demo} && curl -s localhost:4317/v1/payments`;
+  assert.deepEqual(otherTemplateRoots(session, { command }), [demo]);
+  assert.ok(loadPiiTemplateFor(session, { command }).labels.has("billing_zip_code_x"));
+  assert.ok(
+    loadPiiTemplateFor(session, { filePath: join(demo, "src", "x.ts") }).labels.has("billing_zip_code_x"),
+  );
+  assert.deepEqual(otherTemplateRoots(session, { command: "curl -s localhost:4317" }), []);
+});
+
+// invariant: a template the session does not own can only add protection, whoever wrote it.
+test("combining templates masks the union and exempts only what both exempt", () => {
+  const mine = compilePiiTemplate({
+    fields: [{ name: "notes", mode: "pseudonym" }],
+    fixtures: { domains: ["qa.corp-fixture.io"], paths: ["seeds/**"] },
+    ignore: ["company_name"],
+  });
+  const theirs = compilePiiTemplate({
+    fields: [{ name: "notes", mode: "mask" }, "tenant"],
+    fixtures: { domains: ["qa.corp-fixture.io", "everyone.io"], paths: ["**"] },
+    keep: [],
+    ignore: ["company_name", "customer_email"],
+  });
+  const merged = stricterOf(mine, theirs);
+  assert.equal(merged.labels.get("notes")?.mode, "mask");
+  assert.ok(merged.labels.has("tenant"));
+  assert.deepEqual(merged.fixtureDomains, ["qa.corp-fixture.io"]);
+  assert.deepEqual(merged.fixturePaths, []);
+  assert.deepEqual([...merged.keep], []);
+  assert.deepEqual([...merged.ignore], ["company_name"]);
+  assert.equal(stricterOf(theirs, mine).labels.get("notes")?.mode, "mask");
 });

@@ -124,3 +124,18 @@ test("noise that resembles personal data is not personal data", () => {
     "commit by x@host version +1.2.3 order 12345678901 uuid 550e8400-e29b-41d4-a716-446655440000 port +12 sha 3f786850e387550fdab836ed7e6dc881de23001b";
   assert.deepEqual(found(text), []);
 });
+
+// why: measured on the demo API — a mask-mode user agent came back whole because of its parentheses, and
+// `billing_zip` and `last_login_ip` were read in the clear under the default template.
+test("a quoted value with parentheses is data, and zip and login-ip suffixes are personal", () => {
+  const template = compilePiiTemplate({ fields: [{ name: "user_agent", mode: "mask" }] });
+  assert.deepEqual(found('{"user_agent": "Mozilla/5.0 (X11; Linux)"}', template), [
+    ["custom", "Mozilla/5.0 (X11; Linux)"],
+  ]);
+  assert.deepEqual(found("user_agent: getAgent(req)", template), []);
+  assert.deepEqual(found('{"billing_zip": "01310-100", "last_login_ip": "10.1.2.3"}'), [
+    ["address", "01310-100"],
+    ["ip", "10.1.2.3"],
+  ]);
+  assert.deepEqual(found("id  ip\n--  --------\n 1  10.0.0.7"), []);
+});

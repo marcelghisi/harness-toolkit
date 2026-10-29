@@ -141,7 +141,7 @@ import {
 import { scanForPii } from "./pii-scan/pii-scan.service.ts";
 import { classifyPiiSource } from "./pii-scan/pii-scan.source.ts";
 import { pseudonymFor, sessionPseudonyms } from "./pii-scan/pii-scan.store.ts";
-import { loadPiiTemplate } from "./pii-scan/pii-scan.template.ts";
+import { loadPiiTemplate, loadPiiTemplateFor } from "./pii-scan/pii-scan.template.ts";
 import { findAddedPii, writtenPiiFollowup } from "./pii-scan/pii-scan.written.ts";
 import { detectDeviations, detectPlan } from "./plan/plan.detect.ts";
 import { evaluatePlanGate, planVerdict } from "./plan/plan.service.ts";
@@ -586,6 +586,7 @@ export const coreFacade = {
   },
   piiScan: {
     loadPiiTemplate,
+    loadPiiTemplateFor,
     scanForPii,
     classifyPiiSource,
     pseudonymFor,

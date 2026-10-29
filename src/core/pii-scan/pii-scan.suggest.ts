@@ -268,7 +268,7 @@ export function fieldsIn(path: string, text: string, scanned: string = text): Se
 
 // why the last word only: `customer_email` holds a mailbox, `email_subject` and `email_template` configure one.
 const PERSONAL_TOKENS =
-  /(^|_)(email|mail|correo|phone|telefone|telefono|celular|mobile|address|endereco|direccion|adresse|cpf|cnpj|ssn|nif|dni|birth_date|birthdate|nascimento|nacimiento|passport|passaporte)$/;
+  /(^|_)(email|mail|correo|phone|telefone|telefono|celular|mobile|address|endereco|direccion|adresse|cpf|cnpj|ssn|nif|dni|birth_date|birthdate|nascimento|nacimiento|passport|passaporte|zip|zip_code|postal_code|postcode|cep|login_ip|user_ip|signup_ip)$/;
 // why: `name` alone is a project's, a tool's or a file's as often as a person's — it counts only beside a word for a
 // person.
 const PERSON_NAME =

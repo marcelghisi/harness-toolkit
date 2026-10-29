@@ -200,7 +200,12 @@ function redactPii(
   if (!ctx.policy.pii.redactOutput || text === "") {
     return null;
   }
-  const template = coreFacade.piiScan.loadPiiTemplate(event.projectDir);
+  // why: measured — an agent in one repository ran `cd ../demo && curl …` and the demo's own template, which named
+  // the columns it returned, was never consulted. The other project's template can only make this one stricter.
+  const template = coreFacade.piiScan.loadPiiTemplateFor(event.projectDir, {
+    command: event.command,
+    filePath: event.filePath,
+  });
   const source = coreFacade.piiScan.classifyPiiSource({
     command: event.command,
     toolName: event.toolName,

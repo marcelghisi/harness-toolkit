@@ -391,6 +391,12 @@ personal to `pii suggest --candidates`, and hands the resulting template to you.
 installs it: it compiles the template with the hooks' own compiler, refuses it whole on any error, shows the diff
 and asks. It needs a terminal, and the floor refuses it to the agent.
 
+**Which template applies.** The session's project's, made stricter by the template of any other project the event
+read from — a command that `cd`s into it, or a file read inside it. Combined, labels and patterns are the union and
+the exemptions (`fixtures`, `keep`, `ignore`) only what both share, so a template in another directory can add
+protection and never remove it. A request to a server (`curl localhost:4317`) carries no project, so open the agent in
+the project whose API it is.
+
 **Keeping it current.** A new column that looks personal and is not in the template is caught three ways:
 `tlc harness pii check` exits non-zero and lists it with the pack or field that would cover it (`--staged` reads
 only the commit in progress, for CI and hooks); `tlc harness pii hook` installs that check as the repository's

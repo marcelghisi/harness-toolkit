@@ -71,9 +71,20 @@ function isIdentifierName(label: string, value: string): boolean {
   );
 }
 
-function isFixtureValue(kind: string, value: string, template: CompiledPiiTemplate, label = ""): boolean {
+/**
+ * hazard: the code exemption once applied to quoted values too, so `"user_agent": "Mozilla/5.0 (X11)"` in an API
+ * response read as an expression because of its parentheses, and a field the template set to mask came back whole.
+ * A quoted string, a JSON value or a table cell is data; only a bare value can be code.
+ */
+function isFixtureValue(
+  kind: string,
+  value: string,
+  template: CompiledPiiTemplate,
+  label = "",
+  quoted = false,
+): boolean {
   const trimmed = value.trim();
-  if (PLACEHOLDER.test(trimmed) || CODE_VALUE.test(trimmed)) {
+  if (PLACEHOLDER.test(trimmed) || (!quoted && CODE_VALUE.test(trimmed))) {
     return true;
   }
   if (kind === "name" && isIdentifierName(label, trimmed)) {
@@ -107,6 +118,14 @@ const PERSONAL_SUFFIXES = new Set([
   "telefone",
   "celular",
   "nome_completo",
+  // why: `billing_zip` and `last_login_ip` measured unmasked on the demo API under the default template.
+  "zip",
+  "zip_code",
+  "postal_code",
+  "postcode",
+  "cep",
+  "ip_address",
+  "login_ip",
 ]);
 
 export function labelFor(name: string, template: CompiledPiiTemplate): LabelRule | undefined {
@@ -135,8 +154,8 @@ const COLON_FIELD = /(?<![\w"'/])([A-Za-z_][\w.-]{0,63}):[ \t]*(?:"([^"\n]*)"|'(
 
 function labelledFieldMatches(text: string, template: CompiledPiiTemplate): PiiMatch[] {
   const out: PiiMatch[] = [];
-  const push = (rule: LabelRule, label: string, value: string, start: number): void => {
-    if (value.trim() !== "" && !isFixtureValue(rule.kind, value, template, label)) {
+  const push = (rule: LabelRule, label: string, value: string, start: number, quoted: boolean): void => {
+    if (value.trim() !== "" && !isFixtureValue(rule.kind, value, template, label, quoted)) {
       out.push({ start, end: start + value.length, kind: rule.kind, mode: rule.mode });
     }
   };
@@ -144,14 +163,15 @@ function labelledFieldMatches(text: string, template: CompiledPiiTemplate): PiiM
     const rule = labelFor(match[1] ?? "", template);
     const value = match[2] ?? match[3];
     if (rule && value !== undefined && match.index !== undefined) {
-      push(rule, match[1] ?? "", value, match.index + match[0].lastIndexOf(value));
+      push(rule, match[1] ?? "", value, match.index + match[0].lastIndexOf(value), true);
     }
   }
   for (const match of [...text.matchAll(EQUALS_FIELD), ...text.matchAll(COLON_FIELD)]) {
     const rule = labelFor(match[1] ?? "", template);
     const value = (match[2] ?? match[3] ?? match[4] ?? "").trimEnd();
     if (rule && match.index !== undefined) {
-      push(rule, match[1] ?? "", value, match.index + match[0].lastIndexOf(value));
+      const quoted = match[2] !== undefined || match[3] !== undefined;
+      push(rule, match[1] ?? "", value, match.index + match[0].lastIndexOf(value), quoted);
     }
   }
   return out;
@@ -306,7 +326,7 @@ function tableMatches(text: string, template: CompiledPiiTemplate): PiiMatch[] {
       row.forEach((cell, column) => {
         const rule = rules[column];
         const label = found.table.header[column]?.text ?? "";
-        if (rule && cell.text !== "" && !isFixtureValue(rule.kind, cell.text, template, label)) {
+        if (rule && cell.text !== "" && !isFixtureValue(rule.kind, cell.text, template, label, true)) {
           out.push({ start: cell.start, end: cell.end, kind: rule.kind, mode: rule.mode });
         }
       });
