@@ -31,7 +31,7 @@ export type CompiledPiiTemplate = {
 type FieldEntry = string | { name: string; kind?: string; mode?: PiiMode };
 type PatternEntry = { kind: string; regex: string; validate?: string; mode?: PiiMode };
 
-type PiiTemplateFile = {
+export type PiiTemplateFile = {
   extends?: string[];
   fields?: FieldEntry[];
   patterns?: PatternEntry[];

@@ -160,6 +160,8 @@ test("the mutating harness CLI is denied from inside the session", () => {
   assertDenied("env tlc harness grind off");
   assertDenied("/usr/local/bin/tlc harness mode solo");
   assertDenied("tlc harness --json pause");
+  assertDenied("tlc harness pii apply /tmp/pii.proposed.json");
+  assertDenied("tlc harness --json pii apply proposed.json");
 });
 
 test("the read-only harness CLI is allowed", () => {
@@ -170,6 +172,8 @@ test("the read-only harness CLI is allowed", () => {
   assertAllowed("tlc harness prices lookup x");
   assertAllowed("tlc harness lessons list");
   assertAllowed("tlc harness test");
+  assertAllowed("tlc harness pii suggest --candidates -");
+  assertAllowed("tlc harness pii test data/out.txt");
 });
 
 test("one denying segment denies the whole command", () => {

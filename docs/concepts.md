@@ -387,7 +387,9 @@ classes), C# (EF Core), Go (struct tags), Python (Django, SQLAlchemy, Pydantic),
 Doctrine), Elixir (Ecto) and TypeScript/JavaScript (TypeORM, Drizzle, Knex, Sequelize, Mongoose, zod). A source file
 counts only when it carries its ORM's marker, and fixture, seed and data directories are never opened. For what no
 pattern reads, ask the agent for the `harness-pii` skill: it reads the domain model, passes the fields it judges
-personal to `pii suggest --candidates`, and hands the resulting template to you. The CLI accepts only names, kinds,
+personal to `pii suggest --candidates`, and hands the resulting template to you. `tlc harness pii apply <file>`
+installs it: it compiles the template with the hooks' own compiler, refuses it whole on any error, shows the diff
+and asks. It needs a terminal, and the floor refuses it to the agent. The CLI accepts only names, kinds,
 modes and evidence from that list, so a candidate cannot add a pattern, a pack or a fixture.
 
 **What the model reads.** Each personal value becomes `[PII:<kind>:<id>]`, for example `[PII:email:a1b2c3d4@gmail.com]`

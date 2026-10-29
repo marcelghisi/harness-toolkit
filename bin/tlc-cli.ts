@@ -903,7 +903,10 @@ MEASURE
 PROJECT
   tlc harness init --minimal | tlc harness init --write --stdin-json
   tlc harness pii suggest [--candidates <file|->]   propose a personal-data template from the schema
-  tlc harness pii test <file|->    what would be pseudonymised, by line and kind`.split("\n"),
+  tlc harness pii test <file|->    what would be pseudonymised, by line and kind
+  tlc harness pii apply <file>     validate, show the change, and write the template (operator only)`.split(
+          "\n",
+        ),
       },
     ],
     footer: "tlc harness help <topic> for a document  ·  tlc harness why to see what it decided",

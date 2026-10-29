@@ -203,8 +203,8 @@ call and is recorded at session start.
 
 **What** counts as personal data is the project's own template, `.tlc/harness/pii.json`, separate from
 `config.json`. Offer to propose one: if the user accepts, follow the `harness-pii` skill after step 4 — it reads
-the domain model in any language, validates through `tlc harness pii suggest --candidates`, and hands the file to
-the user to save. Without a template the international defaults apply, which miss project-specific columns.
+the domain model in any language, validates through `tlc harness pii suggest --candidates`, and ends with the one
+command the user runs to install it, `tlc harness pii apply <file>`. Without a template the international defaults apply, which miss project-specific columns.
 
 ### Step 3: Confirm
 

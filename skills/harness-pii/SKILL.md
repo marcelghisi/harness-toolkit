@@ -93,11 +93,15 @@ more if you changed names, so what you hand over is what the CLI produced.
 
 Show the operator:
 
-1. the proposed `pii.json`, complete;
+1. the proposed `pii.json`, complete, written to a scratch file outside the repository (that path is what
+   `pii apply` takes);
 2. a table: field → why (the evidence) → pack or custom field → mode;
 3. what you deliberately left out and why (credentials, IDs, company attributes);
 4. what to do next, in their own terminal:
-   - save the file as `.tlc/harness/pii.json` and commit it, so it is reviewed like any other policy;
+   - `tlc harness pii apply <the proposal file>` — it compiles the template, shows the diff against the current
+     one and asks before writing. You cannot run it: the floor refuses it to the agent and it needs a terminal.
+     Do not suggest `cp` or `mv` instead — they skip the validation;
+   - commit `.tlc/harness/pii.json`, so it is reviewed like any other policy;
    - `tlc harness doctor` — the `pii template` row must show no errors;
    - `tlc harness pii test <sample output file>` on a real query result or API response they captured — it prints
      positions and kinds only, never values — and tell you what was over- or under-masked.
