@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scanForPii } from "../src/core/pii-scan/pii-scan.service.ts";
 import { classifyPiiSource } from "../src/core/pii-scan/pii-scan.source.ts";
-import { isSchemaFile, type SchemaFile, suggestPiiTemplate } from "../src/core/pii-scan/pii-scan.suggest.ts";
+import {
+  isSchemaCandidate,
+  type PiiCandidate,
+  type SchemaFile,
+  schemaPatterns,
+  suggestPiiTemplate,
+} from "../src/core/pii-scan/pii-scan.suggest.ts";
 import { loadPiiTemplate } from "../src/core/pii-scan/pii-scan.template.ts";
 import { emitJson, takeJsonFlag } from "../src/platform/cli-output.ts";
 import { listProjectFiles } from "../src/platform/git.ts";
@@ -10,7 +16,7 @@ import { piiTemplatePath } from "../src/platform/paths.ts";
 import { readStdinText } from "../src/platform/process.ts";
 
 function usage(): void {
-  console.log("usage: tlc harness pii suggest | test <file|->");
+  console.log("usage: tlc harness pii suggest [--candidates <file|->] | test <file|->");
 }
 
 // why: a schema file over this size is a data dump, not a schema, and reading it would be reading the data.
@@ -18,10 +24,10 @@ const MAX_SCHEMA_BYTES = 512 * 1024;
 
 function readSchemas(root: string, paths: readonly string[]): SchemaFile[] {
   const files: SchemaFile[] = [];
-  for (const path of paths.filter(isSchemaFile)) {
+  for (const path of paths.filter(isSchemaCandidate)) {
     try {
       const text = readFileSync(join(root, path), "utf8");
-      if (text.length <= MAX_SCHEMA_BYTES) {
+      if (text.length <= MAX_SCHEMA_BYTES && schemaPatterns(path, text).length > 0) {
         files.push({ path, text });
       }
     } catch {}
@@ -29,10 +35,53 @@ function readSchemas(root: string, paths: readonly string[]): SchemaFile[] {
   return files;
 }
 
-async function suggest(root: string, json: boolean): Promise<void> {
+const MODES = new Set(["pseudonym", "mask"]);
+
+/**
+ * invariant: what a reader of the code proposed is only names, kinds and where it saw them. Anything else in the
+ * input is dropped here, so a candidate list can never smuggle a pattern, a pack or a fixture into the template.
+ */
+export function parseCandidates(raw: string): PiiCandidate[] {
+  const parsed: unknown = JSON.parse(raw);
+  const list = Array.isArray(parsed) ? parsed : [];
+  const out: PiiCandidate[] = [];
+  for (const item of list) {
+    const entry = typeof item === "string" ? { name: item } : (item as Record<string, unknown>);
+    if (typeof entry?.name !== "string" || entry.name.trim() === "") {
+      continue;
+    }
+    out.push({
+      name: entry.name,
+      ...(typeof entry.kind === "string" && /^[a-z][\w-]{0,31}$/.test(entry.kind)
+        ? { kind: entry.kind }
+        : {}),
+      ...(typeof entry.mode === "string" && MODES.has(entry.mode)
+        ? { mode: entry.mode as PiiCandidate["mode"] }
+        : {}),
+      ...(typeof entry.evidence === "string" ? { evidence: entry.evidence.slice(0, 160) } : {}),
+    });
+  }
+  return out;
+}
+
+function takeOption(argv: string[], flag: string): { value: string | undefined; rest: string[] } {
+  const at = argv.indexOf(flag);
+  if (at === -1) {
+    return { value: undefined, rest: argv };
+  }
+  return { value: argv[at + 1], rest: [...argv.slice(0, at), ...argv.slice(at + 2)] };
+}
+
+async function suggest(root: string, json: boolean, candidatesFrom: string | undefined): Promise<void> {
   const paths = await listProjectFiles(root);
   const schemas = readSchemas(root, paths);
-  const suggestion = suggestPiiTemplate(schemas, paths);
+  const candidates =
+    candidatesFrom === undefined
+      ? []
+      : parseCandidates(
+          candidatesFrom === "-" ? await readStdinText() : readFileSync(candidatesFrom, "utf8"),
+        );
+  const suggestion = suggestPiiTemplate(schemas, paths, candidates);
   if (json) {
     emitJson(suggestion);
     return;
@@ -40,10 +89,11 @@ async function suggest(root: string, json: boolean): Promise<void> {
   console.log(`# Proposed ${piiTemplatePath(root)} — review, edit, and save it yourself.`);
   console.log(JSON.stringify(suggestion.template, null, 2));
   // why: an empty proposal with no reason reads as "this project holds no personal data", which is never what it means.
-  if (schemas.length === 0) {
+  if (schemas.length === 0 && candidates.length === 0) {
     console.log(
-      "\n# No schema file found (SQL, Prisma, GraphQL, OpenAPI, *schema*/*model*/*types* sources, migrations/).\n" +
-        "  Only the default packs are proposed — list the personal fields yourself under `fields`.",
+      "\n# No schema file found (SQL, migrations, Prisma, GraphQL, OpenAPI, Protobuf, Avro, Liquibase, or ORM classes\n" +
+        "  in Java/Kotlin, C#, Go, Python, Ruby, PHP, Elixir, TypeScript/JavaScript). Only the default packs are\n" +
+        "  proposed — ask the agent to run the harness-pii skill, or list the personal fields under `fields`.",
     );
     return;
   }
@@ -93,11 +143,12 @@ async function testText(root: string, target: string | undefined, json: boolean)
 }
 
 async function main(argv: string[]): Promise<void> {
-  const { json, rest } = takeJsonFlag(argv);
+  const { json, rest: afterJson } = takeJsonFlag(argv);
+  const { value: candidatesFrom, rest } = takeOption(afterJson, "--candidates");
   const root = process.env.TLC_PROJECT_DIR ?? process.cwd();
   const [cmd, target] = rest;
   if (cmd === "suggest") {
-    await suggest(root, json);
+    await suggest(root, json, candidatesFrom);
     return;
   }
   if (cmd === "test") {

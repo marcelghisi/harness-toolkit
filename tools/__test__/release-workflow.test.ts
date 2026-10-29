@@ -235,6 +235,7 @@ describe("the packed artefact is verified before the irreversible step", () => {
     "bin/tlc-exec.mjs",
     "dist/tool-before.mjs",
     "skills/harness-init/SKILL.md",
+    "skills/harness-pii/SKILL.md",
     "schema.json",
   ];
 

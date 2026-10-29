@@ -174,14 +174,16 @@ export function checkSkillLinks(
 ): Check[] {
   return providerDirs
     .filter((dir) => existsSync(dir))
-    .map((dir) => {
-      const health = coreFacade.skill.linkHealth(join(dir, "skills", "harness-init"), home, probe);
-      return {
-        level: health.state === "ok" ? ("ok" as const) : ("fail" as const),
-        name: `init skill (${basename(dir)})`,
-        detail: coreFacade.skill.linkHealthMessage(health),
-      };
-    });
+    .flatMap((dir) =>
+      coreFacade.skill.names.map((skill) => {
+        const health = coreFacade.skill.linkHealth(join(dir, "skills", skill), home, probe);
+        return {
+          level: health.state === "ok" ? ("ok" as const) : ("fail" as const),
+          name: `${skill} skill (${basename(dir)})`,
+          detail: coreFacade.skill.linkHealthMessage(health),
+        };
+      }),
+    );
 }
 
 /**

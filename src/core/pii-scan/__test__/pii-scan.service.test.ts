@@ -82,6 +82,7 @@ test("a name that is an identifier — a package, a resource, a field — is not
   assert.deepEqual(found('{"name": "@scope/pkg"}'), []);
   assert.deepEqual(found('[{ "name": "password", "kind": "credential" }, { "name": "last_login_ip" }]'), []);
   assert.deepEqual(found("id,name\n1,worker-01"), []);
+  assert.deepEqual(found(`{ name: "parecerTecnico", kind: "note" }`), []);
   assert.deepEqual(found('{"name": "Ana"}'), [["name", "Ana"]]);
   assert.deepEqual(found('{"full_name": "ana"}'), [["name", "ana"]]);
 });

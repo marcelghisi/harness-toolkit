@@ -378,8 +378,17 @@ Packs come on three axes:
   with no visible attribute.
 
 `global` (mailbox, E.164 phone, card, IBAN, English field names) is always on. With no file, every checksummed
-`id:` pack and every `lang:` pack applies. `tlc harness pii suggest` proposes a template from the schema files and
-locale folders, and `tlc harness pii test <file|->` shows what would be pseudonymised, by line and kind, never values.
+`id:` pack and every `lang:` pack applies. `tlc harness pii test <file|->` shows what would be pseudonymised, by line
+and kind, never values.
+
+**Building the template.** `tlc harness pii suggest` reads the schema wherever the project keeps it — SQL and
+migrations, Prisma, GraphQL, OpenAPI, Protobuf, Avro, Liquibase, and ORM classes in Java/Kotlin (JPA, records, data
+classes), C# (EF Core), Go (struct tags), Python (Django, SQLAlchemy, Pydantic), Ruby (Rails), PHP (Laravel,
+Doctrine), Elixir (Ecto) and TypeScript/JavaScript (TypeORM, Drizzle, Knex, Sequelize, Mongoose, zod). A source file
+counts only when it carries its ORM's marker, and fixture, seed and data directories are never opened. For what no
+pattern reads, ask the agent for the `harness-pii` skill: it reads the domain model, passes the fields it judges
+personal to `pii suggest --candidates`, and hands the resulting template to you. The CLI accepts only names, kinds,
+modes and evidence from that list, so a candidate cannot add a pattern, a pack or a fixture.
 
 **What the model reads.** Each personal value becomes `[PII:<kind>:<id>]`, for example `[PII:email:a1b2c3d4@gmail.com]`
 or `[PII:card:e5f60718:visa…4242]`. The id is a keyed hash with a per-machine salt, so it is the same for the same

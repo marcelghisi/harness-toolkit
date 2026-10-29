@@ -222,7 +222,7 @@ import {
   recentShipClaimActive,
   touchesRuntime,
 } from "./ship/ship.service.ts";
-import { linkHealth, linkHealthMessage, skillLinks } from "./skill/skill.link.ts";
+import { linkHealth, linkHealthMessage, SKILL_NAMES, skillLinks } from "./skill/skill.link.ts";
 import {
   recordResolution,
   resolutionFor,
@@ -371,6 +371,7 @@ export const coreFacade = {
     linkHealth,
     linkHealthMessage,
     skillLinks,
+    names: SKILL_NAMES,
   },
   lesson: {
     projectLessonsInjectable,

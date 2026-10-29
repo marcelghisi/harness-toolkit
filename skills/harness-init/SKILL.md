@@ -194,6 +194,18 @@ Four things to say out loud, because all four surprise people later:
 If they accept the capability but have no requirement in mind, write `rules.enabled: false` and say why — a switch
 with no file is the shape that looks like protection and is not.
 
+### Step 2f: Personal data (on by default — say so, then offer the template)
+
+PII protection is on by default: query results, API responses and logs have names, e-mails, phones, documents and
+cards pseudonymised before the model sees them, and personal data written into code, config or logs blocks the
+turn's stop. Its two switches are `pii.redactOutput` and `pii.blockWrites`; turning either off is the operator's
+call and is recorded at session start.
+
+**What** counts as personal data is the project's own template, `.tlc/harness/pii.json`, separate from
+`config.json`. Offer to propose one: if the user accepts, follow the `harness-pii` skill after step 4 — it reads
+the domain model in any language, validates through `tlc harness pii suggest --candidates`, and hands the file to
+the user to save. Without a template the international defaults apply, which miss project-specific columns.
+
 ### Step 3: Confirm
 
 Show the **full proposed** `.tlc/harness/config.json` in a fenced block (English keys/strings only). Ask

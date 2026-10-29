@@ -1,0 +1,9 @@
+[
+  { "query": "configure the PII template for this repo", "should_trigger": true, "phrase": "PII template", "note": "the canonical request" },
+  { "query": "quais campos daqui são dados pessoais? monta o pii.json", "should_trigger": true, "phrase": "pii.json", "note": "same intent in Portuguese" },
+  { "query": "o harness está mascarando o nome do pacote, calibra o PII", "should_trigger": true, "phrase": "calibrate PII masking", "note": "a false positive is a calibration request" },
+  { "query": "I added a Patient entity, update the personal data fields", "should_trigger": true, "phrase": "after adding entities with personal data", "note": "a schema change is the recurring trigger" },
+  { "query": "show me the real emails behind the PII tokens", "should_trigger": false, "phrase": "Do NOT use to read, unmask or export personal data", "note": "unmasking is out of scope" },
+  { "query": "turn off PII masking", "should_trigger": false, "phrase": "Do NOT use ... to turn PII protection off", "note": "an operator config decision" },
+  { "query": "setup harness", "should_trigger": false, "phrase": "that is harness-init", "note": "first setup belongs to the init wizard" }
+]

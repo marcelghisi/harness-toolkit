@@ -53,6 +53,7 @@ export function assertPayload(entries) {
     "bin/tlc-exec.mjs",
     "dist/tool-before.mjs",
     "skills/harness-init/SKILL.md",
+    "skills/harness-pii/SKILL.md",
     // why here, not just in bin/tlc-build.mjs's own exit code: a missing typescript-json-schema
     // degrades that script to a warning (so a broken install can still rebuild dist/), which means
     // the same silent skip would otherwise reach `npm publish` if it happened during `prepack`.

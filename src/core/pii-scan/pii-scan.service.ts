@@ -58,11 +58,17 @@ const CODE_VALUE =
 // resource or a field. A person's name has a space or a capital; an identifier has neither, or has a separator.
 const SEPARATED_IDENTIFIER = /^@?[a-z0-9]+(?:[-_./@:][a-z0-9]+)+$/;
 const LOWER_WORD = /^[a-z][a-z0-9]*$/;
+// why: `parecerTecnico` is a field; a person's name never starts lower-case and turns upper-case mid-word.
+const CAMEL_IDENTIFIER = /^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]*)+$/;
 
 // hazard: a store that lower-cases a single first name under a bare `name` column now reads it in the clear. The
 // labelled columns (`first_name`, `full_name`, `nome`) are not relaxed, and a capitalised value is still masked.
 function isIdentifierName(label: string, value: string): boolean {
-  return SEPARATED_IDENTIFIER.test(value) || (normalizeLabel(label) === "name" && LOWER_WORD.test(value));
+  return (
+    SEPARATED_IDENTIFIER.test(value) ||
+    CAMEL_IDENTIFIER.test(value) ||
+    (normalizeLabel(label) === "name" && LOWER_WORD.test(value))
+  );
 }
 
 function isFixtureValue(kind: string, value: string, template: CompiledPiiTemplate, label = ""): boolean {
