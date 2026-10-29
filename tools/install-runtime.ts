@@ -289,7 +289,7 @@ if (import.meta.main) {
     console.log(`install: ${line}`);
   }
   if (wired.missingSkill) {
-    console.error(`install: missing skill at ${join(dest, "skills", "harness-init")}`);
+    console.error(`install: missing skill at ${wired.missingSkill}`);
     process.exit(1);
   }
 

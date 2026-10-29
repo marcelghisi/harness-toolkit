@@ -347,11 +347,17 @@ test("every launcher name and every skill layout is a target, with no platform t
     "the name the PowerShell installer copied",
   );
 
-  assert.equal(targets.skillLinks.length, 3);
+  // invariant: two providers per shipped skill, plus the one legacy junction, which only ever held the init skill.
+  assert.equal(targets.skillLinks.length, 5);
   assert.equal(
     targets.skillLinks.filter((path) => path.endsWith("harness-init")).length,
     3,
-    "each one names the skill",
+    "each provider and the legacy junction name the init skill",
+  );
+  assert.equal(
+    targets.skillLinks.filter((path) => path.endsWith("harness-pii")).length,
+    2,
+    "each provider names the PII skill",
   );
   assert.ok(
     targets.skillLinks.some((path) => path.includes(".tlc")),

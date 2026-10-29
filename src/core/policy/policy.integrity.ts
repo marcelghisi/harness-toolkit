@@ -5,6 +5,7 @@ import type { Decision } from "../../contracts/decision.ts";
 import {
   flagsDir,
   machineConfigPath,
+  piiTemplatePath,
   policyBaselineDir,
   projectConfigPath,
   projectStateDir,
@@ -39,6 +40,7 @@ function hashOf(path: string): string {
 export function policySourceFingerprint(root: string): PolicySource[] {
   const paths = [
     projectConfigPath(root),
+    piiTemplatePath(root),
     machineConfigPath(),
     join(projectStateDir(root), MODE_FILE),
     ...FLAG_FILES.map((flag) => join(flagsDir(root), flag)),

@@ -158,6 +158,31 @@ function gateDetail(rollup: SessionRollup): string {
  * Listed by cause, with the variable names and where they surfaced, so the operator can go to the line that logs
  * or holds the credential ([/decisions/ad-149.md](/decisions/ad-149.md)).
  */
+/**
+ * why apart from secrets: personal data in a query result is expected and only counted; in a log, a source file or a
+ * turn's own writes it is a defect, and the row says where to go ([/decisions/ad-151.md](/decisions/ad-151.md)).
+ */
+function piiExposureSection(rollup: SessionRollup): string {
+  const entries = Object.entries(rollup.piiBySource ?? {}).sort((a, b) => b[1].count - a[1].count);
+  if (entries.length === 0) {
+    return "";
+  }
+  return [
+    "",
+    "## PII exposure",
+    "",
+    "| Source | Pseudonymised | Kinds | Seen in |",
+    "|--------|---------------|-------|---------|",
+    ...entries.map(
+      ([source, slot]) =>
+        `| ${source} | ${slot.count} | ${slot.kinds.join(", ")} | ${slot.subjects.map((s) => `\`${s}\``).join(", ")} |`,
+    ),
+    "",
+    "Values are never recorded. A db-query or api-response row is expected; any other row is data that should not be there.",
+    "",
+  ].join("\n");
+}
+
 function secretHygieneSection(rollup: SessionRollup): string {
   const entries = Object.entries(rollup.secretsByCause ?? {}).sort((a, b) => b[1].count - a[1].count);
   if (entries.length === 0) {
@@ -272,7 +297,7 @@ ${subs || "| — | 0 | {} |"}
 ${JSON.stringify(rollup.mcp, null, 2)}
 \`\`\`
 ${gateTimeSection(rollup)}
-${secretHygieneSection(rollup)}
+${secretHygieneSection(rollup)}${piiExposureSection(rollup)}
 ${railActivity(rollup, activeRules)}
 ${costLines(rollup).join("\n")}
 `;
@@ -314,6 +339,14 @@ export function sessionReportScreen(rollup: SessionRollup): Screen {
       label: cause,
       value: `${slot.count} masked — ${slot.kinds.join(", ")}${slot.subjects.length > 0 ? ` in ${slot.subjects.join(", ")}` : ""}`,
       level: "warn" as const,
+    }));
+
+  const piiRows: Row[] = Object.entries(rollup.piiBySource ?? {})
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([source, slot]) => ({
+      label: source,
+      value: `${slot.count} pseudonymised — ${slot.kinds.join(", ")}${slot.subjects.length > 0 ? ` in ${slot.subjects.join(", ")}` : ""}`,
+      level: source === "db-query" || source === "api-response" ? ("ok" as const) : ("warn" as const),
     }));
 
   const ruleRows: Row[] = Object.entries(rollup.shell.byRule ?? {})
@@ -364,6 +397,7 @@ export function sessionReportScreen(rollup: SessionRollup): Screen {
       },
       ...(ruleRows.length > 0 ? [{ title: "Interruptions by rule", rows: ruleRows }] : []),
       ...(secretRows.length > 0 ? [{ title: "Secret hygiene", rows: secretRows }] : []),
+      ...(piiRows.length > 0 ? [{ title: "PII exposure", rows: piiRows }] : []),
       ...(toolRows.length > 0 ? [{ title: "Tools", rows: toolRows }] : []),
       ...(Object.keys(rollup.models).length > 0
         ? [{ title: "Models", lines: [top(rollup.models).join("  ·  ")] }]

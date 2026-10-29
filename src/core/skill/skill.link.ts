@@ -15,6 +15,14 @@ import { isInside } from "../floor/floor.paths.ts";
 
 export const SKILL_NAME = "harness-init";
 
+/**
+ * Every skill the runtime ships, linked the same way.
+ *
+ * invariant: one list, read by install, `doctor`, `uninstall` and the package check, so a skill added here is linked,
+ * checked, removed and shipped — and a skill missing here is none of those.
+ */
+export const SKILL_NAMES: readonly string[] = [SKILL_NAME, "harness-pii"];
+
 export type SkillLink = { providerDir: string; source: string; target: string };
 
 /**
@@ -26,15 +34,17 @@ export function skillLinks(
   runtimeHome: string,
   providerDirs: readonly string[],
   present: (path: string) => boolean,
+  names: readonly string[] = SKILL_NAMES,
 ) {
-  const source = `${runtimeHome}/skills/${SKILL_NAME}`;
   return providerDirs
     .filter((dir) => present(dir))
-    .map((providerDir) => ({
-      providerDir,
-      source,
-      target: `${providerDir}/skills/${SKILL_NAME}`,
-    }));
+    .flatMap((providerDir) =>
+      names.map((name) => ({
+        providerDir,
+        source: `${runtimeHome}/skills/${name}`,
+        target: `${providerDir}/skills/${name}`,
+      })),
+    );
 }
 
 export type LinkHealth =
@@ -89,6 +99,6 @@ export function linkHealthMessage(health: LinkHealth): string {
     case "outside-runtime":
       return `points at ${health.resolved}, outside the runtime — it will break when that path goes`;
     default:
-      return "not linked — the provider cannot see the init skill";
+      return "not linked — the provider cannot see this skill";
   }
 }

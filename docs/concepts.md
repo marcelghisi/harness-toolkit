@@ -354,6 +354,76 @@ the masked output with the fix: never log a credential at any level, debug inclu
 length, source, an HMAC fingerprint) instead. `tlc harness obs report` lists every masked secret by cause in a
 **Secret hygiene** section, with variable names and where they surfaced, never values.
 
+## personal data (PII)
+
+`pii.redactOutput` and `pii.blockWrites`, both on by default ([/decisions/ad-151.md](/decisions/ad-151.md)).
+
+**What counts** is the project's own definition, in `.tlc/harness/pii.json`, which is policy: an agent cannot write
+it, and an out-of-band edit trips the baseline check.
+
+```json
+{
+  "extends": ["id:br", "id:us", "id:es", "lang:pt", "lang:es", "domain:finance"],
+  "fields": ["cliente_nome", { "name": "tenant", "kind": "tenant", "mode": "mask" }],
+  "patterns": [{ "kind": "member", "regex": "MBR-\\d{16}", "validate": "luhn" }],
+  "fixtures": { "domains": ["e2e.test"], "paths": ["backups/e2e/**"] },
+  "keep": ["email-domain", "phone-country", "card-last4"]
+}
+```
+
+Packs come on three axes:
+- `id:<country>`: documents and their checksums;
+- `lang:<language>`: field names;
+- `domain:<sector>`: sector fields. `health` and `special`, the GDPR art. 9 / LGPD sensitive categories, are masked
+  with no visible attribute.
+
+`global` (mailbox, E.164 phone, card, IBAN, English field names) is always on. With no file, every checksummed
+`id:` pack and every `lang:` pack applies. `tlc harness pii test <file|->` shows what would be pseudonymised, by line
+and kind, never values.
+
+**Building the template.** `tlc harness pii suggest` reads the schema wherever the project keeps it — SQL and
+migrations, Prisma, GraphQL, OpenAPI, Protobuf, Avro, Liquibase, and ORM classes in Java/Kotlin (JPA, records, data
+classes), C# (EF Core), Go (struct tags), Python (Django, SQLAlchemy, Pydantic), Ruby (Rails), PHP (Laravel,
+Doctrine), Elixir (Ecto) and TypeScript/JavaScript (TypeORM, Drizzle, Knex, Sequelize, Mongoose, zod). A source file
+counts only when it carries its ORM's marker, and fixture, seed and data directories are never opened. For what no
+pattern reads, ask the agent for the `harness-pii` skill: it reads the domain model, passes the fields it judges
+personal to `pii suggest --candidates`, and hands the resulting template to you. `tlc harness pii apply <file>`
+installs it: it compiles the template with the hooks' own compiler, refuses it whole on any error, shows the diff
+and asks. It needs a terminal, and the floor refuses it to the agent.
+
+**Which template applies.** The session's project's, made stricter by the template of any other project the event
+read from — a command that `cd`s into it, or a file read inside it. Combined, labels and patterns are the union and
+the exemptions (`fixtures`, `keep`, `ignore`) only what both share, so a template in another directory can add
+protection and never remove it. A request to a server (`curl localhost:4317`) carries no project, so open the agent in
+the project whose API it is.
+
+**Keeping it current.** A new column that looks personal and is not in the template is caught three ways:
+`tlc harness pii check` exits non-zero and lists it with the pack or field that would cover it (`--staged` reads
+only the commit in progress, for CI and hooks); `tlc harness pii hook` installs that check as the repository's
+pre-commit hook, leaving any existing hook alone; and a turn whose own additions declare such a field ends with an
+advisory that sends the agent to the `harness-pii` skill. `doctor` shows the count. A field the operator reviewed
+and decided is not personal goes under `ignore` in the template, which quiets the check and never unmasks a value a
+pack still labels. The CLI accepts only names, kinds,
+modes and evidence from that list, so a candidate cannot add a pattern, a pack or a fixture.
+
+**What the model reads.** Each personal value becomes `[PII:<kind>:<id>]`, for example `[PII:email:a1b2c3d4@gmail.com]`
+or `[PII:card:e5f60718:visa…4242]`. The id is a keyed hash with a per-machine salt, so it is the same for the same
+value in every session and cannot be recomputed from the value. Counts, joins and duplicates survive; the values do
+not.
+
+A `docker compose exec db psql` on a laptop is treated exactly like a `psql` on a server. Personal data in a query or
+an API result is expected, and the advice says to aggregate in the query or a script. In a log, a source file or a
+config it is a defect, and the advice says how to fix it at the origin. In a source file only self-proving shapes
+are matched, so code stays readable.
+
+**What a turn writes.** At stop, the lines a turn added are checked. A real mailbox, a valid document or a real card
+in code, a comment, a config or a log sends the turn back with `file:line (kind)`. A reserved domain (`example.com`,
+`.invalid`, `.test`), an invalid-checksum document or an issuer test card is a fixture and passes. A token this
+session handed out cannot be written back into a file (`pii-placeholder-write`).
+
+**On disk**, audit and obs records carry `[PII:<kind>]`. `tlc harness obs report` lists a **PII exposure** section
+by source, and turning either switch off records `pii.disabled` at session start.
+
 ## intelligence (rails)
 
 | Key | Effect |

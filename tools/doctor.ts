@@ -7,7 +7,9 @@ import { findBunOnPath, writeRuntimeCache } from "../bin/tlc-exec.mjs";
 import { isCursorWired } from "../bin/write-user-hooks.mjs";
 import type { ProviderWiring } from "../src/contracts/index.ts";
 import { coreFacade } from "../src/core/index.ts";
+import type { SchemaFile } from "../src/core/pii-scan/pii-scan.suggest.ts";
 import { emitJson, takeJsonFlag } from "../src/platform/cli-output.ts";
+import { listProjectFiles } from "../src/platform/git.ts";
 import {
   executableOnPath,
   launcherBinDir,
@@ -26,6 +28,7 @@ import {
 } from "../src/providers/cursor/cursor.wiring.ts";
 import { providers } from "../src/providers/index.ts";
 import type { ProviderPort } from "../src/providers/provider.port.ts";
+import { readSchemas } from "./pii-cli.ts";
 
 export type CheckLevel = "ok" | "warn" | "fail";
 
@@ -174,14 +177,16 @@ export function checkSkillLinks(
 ): Check[] {
   return providerDirs
     .filter((dir) => existsSync(dir))
-    .map((dir) => {
-      const health = coreFacade.skill.linkHealth(join(dir, "skills", "harness-init"), home, probe);
-      return {
-        level: health.state === "ok" ? ("ok" as const) : ("fail" as const),
-        name: `init skill (${basename(dir)})`,
-        detail: coreFacade.skill.linkHealthMessage(health),
-      };
-    });
+    .flatMap((dir) =>
+      coreFacade.skill.names.map((skill) => {
+        const health = coreFacade.skill.linkHealth(join(dir, "skills", skill), home, probe);
+        return {
+          level: health.state === "ok" ? ("ok" as const) : ("fail" as const),
+          name: `${skill} skill (${basename(dir)})`,
+          detail: coreFacade.skill.linkHealthMessage(health),
+        };
+      }),
+    );
 }
 
 /**
@@ -286,6 +291,54 @@ export function checkRules(root: string): Check[] {
     });
   }
 
+  return checks;
+}
+
+/**
+ * why a row: the personal-data template is the project's definition of what to protect, and a typo in it (an unknown
+ * pack, a regex that does not compile) silently protects less. The hook never fails on it, so doctor is where it shows.
+ */
+export function checkPiiTemplate(root: string, schemas: readonly SchemaFile[] | null = null): Check[] {
+  const policy = coreFacade.policy.loadPolicy(root);
+  if (!policy.pii.redactOutput && !policy.pii.blockWrites) {
+    return [
+      { level: "warn", name: "pii template", detail: "personal-data protection is off in this project" },
+    ];
+  }
+  const template = coreFacade.piiScan.loadPiiTemplate(root);
+  const custom = [...template.labels.values()].filter((rule) => rule.kind === "custom").length;
+  const where =
+    template.source === "file"
+      ? "pii.json"
+      : "international default (no pii.json; tlc harness pii suggest proposes one)";
+  const checks: Check[] = [
+    {
+      level: template.errors.length > 0 ? "warn" : "ok",
+      name: "pii template",
+      detail: `${where} — packs ${template.packs.join(", ")}; ${template.labels.size} field names (${custom} custom), ${template.detectors.length} value detectors`,
+    },
+  ];
+  for (const error of template.errors) {
+    checks.push({
+      level: "warn",
+      name: "pii template",
+      detail: `${error} — the rest of the template still applies`,
+    });
+  }
+  if (schemas !== null) {
+    const uncovered = coreFacade.piiScan.uncoveredFields(schemas, template);
+    checks.push({
+      level: uncovered.length > 0 ? "warn" : "ok",
+      name: "pii coverage",
+      detail:
+        uncovered.length > 0
+          ? `${uncovered.length} schema field(s) look personal and are not covered (${uncovered
+              .slice(0, 5)
+              .map((field) => field.field)
+              .join(", ")}${uncovered.length > 5 ? ", …" : ""}) — \`tlc harness pii check\` lists them`
+          : `every personal-looking field in ${schemas.length} schema file(s) is covered`,
+    });
+  }
   return checks;
 }
 
@@ -833,6 +886,8 @@ export type DoctorContext = {
   nodeVersion: string;
   bunPath: string | null;
   registry: readonly ProviderPort[];
+  /** why optional: listing the project's files is a git call, so a context built for a test leaves it out. */
+  schemas?: readonly SchemaFile[] | null;
 };
 
 export function runChecks(ctx: DoctorContext): Check[] {
@@ -846,6 +901,7 @@ export function runChecks(ctx: DoctorContext): Check[] {
     ...checkCapabilities(ctx.root, ctx.runtimeHome),
     ...checkPrices(),
     ...checkRules(ctx.root),
+    ...checkPiiTemplate(ctx.root, ctx.schemas ?? null),
     checkGlobalCommands(ctx.home),
   ];
 }
@@ -941,7 +997,11 @@ function realContext(): DoctorContext {
 
 if (import.meta.main) {
   const { json } = takeJsonFlag(process.argv.slice(2));
-  const checks = runChecks(realContext());
+  const context = realContext();
+  const checks = runChecks({
+    ...context,
+    schemas: readSchemas(context.root, await listProjectFiles(context.root)),
+  });
   if (json) {
     emitJson(toReport(checks));
   } else {

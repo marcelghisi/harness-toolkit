@@ -159,6 +159,10 @@ const HARNESS_BINS = new Set(["tlc", "tlc.cmd"]);
 // tampering signal, so an agent that could reach it would make the whole integrity rail decorative. It is refused
 // by a floor rule with no config switch, exactly like the rest ([/decisions/ad-030.md](/decisions/ad-030.md)).
 const MUTATING_SUBCOMMANDS = new Set(["pause", "resume", "reset", "grind", "mode", "init", "gate", "policy"]);
+// why: `pii suggest` and `pii test` only read, so the subcommand stays open; `pii apply` writes the PII template,
+// which is policy — an agent that could run it would make the template's place on the policy surface decorative
+// ([/decisions/ad-151.md](/decisions/ad-151.md)).
+const MUTATING_ACTIONS: Readonly<Record<string, ReadonlySet<string>>> = { pii: new Set(["apply"]) };
 
 function deny(detail: string, note: string, remedy?: string): PolicySurfaceVerdict {
   return { kind: "deny", detail, note, ...(remedy ? { remedy } : {}) };
@@ -275,7 +279,15 @@ function harnessSubcommand(args: ShellWord[]): string | null {
   }
   // why: `route()` defaults a missing subcommand to `status`, so bare `tlc harness` reads state and is
   // not a mutation.
-  return (operands[1]?.text ?? "status").toLowerCase();
+  const subcommand = (operands[1]?.text ?? "status").toLowerCase();
+  const action = operands[2]?.text.toLowerCase();
+  return action !== undefined && MUTATING_ACTIONS[subcommand]?.has(action)
+    ? `${subcommand} ${action}`
+    : subcommand;
+}
+
+function isMutating(subcommand: string): boolean {
+  return MUTATING_SUBCOMMANDS.has(subcommand) || subcommand.includes(" ");
 }
 
 function checkSegment(
@@ -297,7 +309,7 @@ function checkSegment(
 
   if (head && HARNESS_BINS.has(head.verb)) {
     const subcommand = harnessSubcommand(head.args);
-    if (subcommand !== null && MUTATING_SUBCOMMANDS.has(subcommand)) {
+    if (subcommand !== null && isMutating(subcommand)) {
       return deny(
         `\`tlc harness ${subcommand}\` changes harness policy, and policy is the operator's to change.`,
         `tlc harness ${subcommand}`,

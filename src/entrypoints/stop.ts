@@ -860,6 +860,56 @@ export const stopHandler: Handler = async (event: HarnessEvent, ctx: HandlerCont
   }
 
   /**
+   * why: personal data has one legitimate home, the database or the API that serves it. A turn that writes it into
+   * code, a comment, a config or a log made a copy that will outlive the record it came from, so the stop sends the
+   * turn back with where and what kind — never the value ([/decisions/ad-151.md](/decisions/ad-151.md)).
+   */
+  if (policy.pii.blockWrites && changedFiles.length > 0) {
+    const added = await listAddedLines(shaRoot, changedFiles, turnBase);
+    const findings = coreFacade.piiScan.findAddedPii(added, coreFacade.piiScan.loadPiiTemplate(root));
+    if (findings.length > 0) {
+      coreFacade.observability.recordObs(root, obsConfigFor(policy), {
+        provider,
+        kind: "pii.written",
+        sessionKey,
+        attrs: {
+          kinds: [...new Set(findings.map((finding) => finding.kind))],
+          subject: findings[0]?.file ?? "",
+          count: findings.length,
+        },
+      });
+      await coreFacade.handoff.patchHandoff(root, provider, sessionKey, {
+        slice: {
+          last_gate_result: "fail",
+          blockers: `This turn added personal data to the repository in ${findings.length} place(s).`,
+          next_action: coreFacade.turn.suggestionFor("verification", "pii"),
+        },
+      });
+      return { kind: "continue", text: coreFacade.piiScan.writtenPiiFollowup(findings) };
+    }
+  }
+
+  /**
+   * why advisory and last: a new column that looks personal is a template the operator has not updated yet, not a
+   * defect in the turn — so it never refuses the stop, and it is said only once every gate has passed
+   * ([/decisions/ad-151.md](/decisions/ad-151.md)).
+   */
+  const piiCoverage =
+    policy.pii.redactOutput && changedFiles.length > 0
+      ? coreFacade.piiScan.uncoveredInAdded(
+          await listAddedLines(shaRoot, changedFiles, turnBase),
+          (file) => {
+            try {
+              return readFileSync(join(shaRoot, file), "utf8");
+            } catch {
+              return null;
+            }
+          },
+          coreFacade.piiScan.loadPiiTemplate(root),
+        )
+      : [];
+
+  /**
    * why: the same diff scope the comment gate uses, asking a different question — did this turn write something
    * the project already has? Two copies of a run drift apart, and the second copy is where the drift starts
    * ([/decisions/ad-071.md](/decisions/ad-071.md)).
@@ -1120,6 +1170,9 @@ export const stopHandler: Handler = async (event: HarnessEvent, ctx: HandlerCont
       fingerprint_hits: 0,
     },
   });
+  if (piiCoverage.length > 0) {
+    return { kind: "context", text: coreFacade.piiScan.uncoveredFollowup(piiCoverage) };
+  }
   return { kind: "abstain" };
 };
 

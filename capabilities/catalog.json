@@ -1,5 +1,5 @@
 {
-  "catalogVersion": 16,
+  "catalogVersion": 17,
   "capabilities": [
     {
       "id": "grind",
@@ -462,6 +462,40 @@
       ],
       "verdict": "context",
       "inspect": "the masked placeholder itself, in the tool output \u2014 `[REDACTED:env:<VARIABLE>:<hash>]`",
+      "asks": [],
+      "recommend": "on"
+    },
+    {
+      "id": "piiRedaction",
+      "configPath": "pii.redactOutput",
+      "title": "PII pseudonymisation (tool/shell output)",
+      "summary": "Replaces personal data in query rows, API responses, logs and files with a stable pseudonym, per the project's template.",
+      "benefit": "Names, emails, phones, cards, IBANs and national documents from a database or an API never reach the model or its provider. Each value becomes `[PII:<kind>:<id>]`, the same token every time, so the agent can still count, join and find duplicates; a domain, a country code or a card's last four stay visible. A local `docker compose` database gets the same protection as a server. What counts as personal data \u2014 packs by country, language and sector, extra fields and patterns, fixture domains and paths \u2014 is declared in `.tlc/harness/pii.json`; without one, an international default applies.",
+      "tradeOff": "A regex and checksum pass on every output, plus a field-name pass on query results, API responses, logs and config. A name or an address in free text, with no field name beside it, is not recognised; a value in a column the template does not name passes. On a host with no rewrite for the firing event the pseudonym degrades to a context warning and the raw value has already reached the model. An agent that needs raw values has to aggregate in the query or a script, or the operator turns this off.",
+      "defaultOn": true,
+      "sinceCatalogVersion": 17,
+      "fires": [
+        "tool.after"
+      ],
+      "verdict": "context",
+      "inspect": "the pseudonym itself, in the tool output \u2014 `[PII:<kind>:<id>]`; `tlc harness obs report` \u2014 PII exposure by source",
+      "asks": [],
+      "recommend": "on"
+    },
+    {
+      "id": "piiWriteGate",
+      "configPath": "pii.blockWrites",
+      "title": "PII write gate (no personal data in the repository)",
+      "summary": "Sends the turn back when the lines it added carry personal data \u2014 in code, comments, config or logs.",
+      "benefit": "Personal data has one legitimate home, the database or the API that serves it. A real mailbox, a valid document or a real card typed into a seed, a comment, a config or a log is caught before the turn ends, with the file, line and kind \u2014 never the value \u2014 and the fix: a fixture with a reserved domain, an invalid-checksum document or an issuer test card.",
+      "tradeOff": "Reads the lines the turn added at stop. In a source file only self-proving shapes count, so a made-up name beside a field (`name: \"Ana\"`) does not block; a legitimate seed has to be listed under `fixtures.paths` in `.tlc/harness/pii.json` by the operator.",
+      "defaultOn": true,
+      "sinceCatalogVersion": 17,
+      "fires": [
+        "stop"
+      ],
+      "verdict": "block-stop",
+      "inspect": "the stop follow-up \u2014 `[PII-HYGIENE written]` with file:line:kind; `tlc harness obs report` \u2014 PII exposure, row `written`",
       "asks": [],
       "recommend": "on"
     }

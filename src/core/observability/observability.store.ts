@@ -35,6 +35,11 @@ export type SessionRollup = {
    * this field existed has none ([/decisions/ad-149.md](/decisions/ad-149.md)).
    */
   secretsByCause?: Record<string, { count: number; kinds: string[]; subjects: string[] }>;
+  /**
+   * why: what the personal-data rail pseudonymised, by where it surfaced — and, under `written`, what a turn tried to
+   * add to the repository ([/decisions/ad-151.md](/decisions/ad-151.md)).
+   */
+  piiBySource?: Record<string, { count: number; kinds: string[]; subjects: string[] }>;
   /** Per-gate pass/fail, so a single flaky gate is distinguishable from a codebase that does not build. */
   gatesByName: Record<string, { pass: number; fail: number }>;
   /**

@@ -901,7 +901,14 @@ MEASURE
   tlc harness lessons list|show|garden|sync-rules
 
 PROJECT
-  tlc harness init --minimal | tlc harness init --write --stdin-json`.split("\n"),
+  tlc harness init --minimal | tlc harness init --write --stdin-json
+  tlc harness pii suggest [--candidates <file|->]   propose a personal-data template from the schema
+  tlc harness pii check [--staged] fail when a schema field looks personal and the template misses it
+  tlc harness pii hook             install that check as the repository's pre-commit hook
+  tlc harness pii test <file|->    what would be pseudonymised, by line and kind
+  tlc harness pii apply <file>     validate, show the change, and write the template (operator only)`.split(
+          "\n",
+        ),
       },
     ],
     footer: "tlc harness help <topic> for a document  ·  tlc harness why to see what it decided",
@@ -1091,15 +1098,16 @@ export function launcherLines(dest: string): string[] {
   return lines;
 }
 
-export function wireRuntime(dest: string, home: string): { lines: string[]; missingSkill: boolean } {
+export function wireRuntime(dest: string, home: string): { lines: string[]; missingSkill: string | null } {
   const lines: string[] = [];
   const seeded = seedConfig(dest);
   if (seeded.seeded) {
     lines.push(`config seeded → ${seeded.path}`);
   }
 
-  if (!existsSync(join(dest, "skills", "harness-init"))) {
-    return { lines, missingSkill: true };
+  const missing = coreFacade.skill.names.find((name) => !existsSync(join(dest, "skills", name)));
+  if (missing !== undefined) {
+    return { lines, missingSkill: join(dest, "skills", missing) };
   }
 
   const links = coreFacade.skill.skillLinks(dest, providerConfigDirs(), existsSync);
@@ -1122,7 +1130,7 @@ export function wireRuntime(dest: string, home: string): { lines: string[]; miss
   if ((hooks.status ?? 1) !== 0) {
     lines.push("hooks unchanged (merge manually or: node bin/write-user-hooks.mjs --force)");
   }
-  return { lines, missingSkill: false };
+  return { lines, missingSkill: null };
 }
 
 /**
@@ -1294,6 +1302,8 @@ export function route(args: string[]): Action {
     case "lessons":
     case "lesson":
       return { kind: "entry", entry: "lessons-cli", args: args.slice(1) };
+    case "pii":
+      return { kind: "entry", entry: "pii-cli", args: args.slice(1) };
     case "init":
       return { kind: "entry", entry: "init-project", args: args.slice(1) };
     case "install":
@@ -1583,7 +1593,7 @@ function runUpdate(root: string): never {
     console.log(`update: ${line}`);
   }
   if (wired.missingSkill) {
-    console.error(`update: missing skill at ${join(dest, "skills", "harness-init")}`);
+    console.error(`update: missing skill at ${wired.missingSkill}`);
     process.exit(1);
   }
 
@@ -1664,7 +1674,7 @@ async function main(argv: string[]): Promise<void> {
   if (group !== "harness") {
     console.error(`unknown: ${argv[0] ?? ""}`);
     console.error(
-      "usage: tlc harness <status|doctor|help|grind|pause|resume|reset|mode|obs|prices|lessons|init|update|test|verify|build>",
+      "usage: tlc harness <status|doctor|help|grind|pause|resume|reset|mode|obs|prices|lessons|pii|init|update|test|verify|build>",
     );
     process.exit(1);
   }

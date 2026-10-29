@@ -842,3 +842,140 @@ test("a Bash output object comes back masked in Bash's own shape, with the advic
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// why built at runtime: a literal mailbox in this file would be personal data the write gate refuses.
+const PII_MAIL = ["ana.souza", "gmail.com"].join("@");
+
+function psqlRows(): string {
+  return ` id | full_name | email\n----+-----------+------\n  1 | Ana Souza | ${PII_MAIL}\n(1 row)`;
+}
+
+// invariant: the container on the laptop and the server are one source — the rows are the same rows.
+test("a query result is pseudonymised the same way whether psql runs locally in compose or on a server", async () => {
+  for (const command of [
+    "docker compose exec db psql -U app -c 'select * from users'",
+    "ssh prod \"psql -c 'select * from users'\"",
+  ]) {
+    const root = tempRoot();
+    try {
+      const outcome = await runHandler(
+        toolAfterHandler,
+        stdinOf(
+          claudeToolAfter(root, { tool_name: "Bash", tool_input: { command }, tool_response: psqlRows() }),
+        ),
+      );
+      assert.equal(outcome.decision.kind, "rewriteOutput", command);
+      const output =
+        outcome.decision.kind === "rewriteOutput"
+          ? `${outcome.decision.output}\n${outcome.decision.notice ?? ""}`
+          : "";
+      assert.doesNotMatch(output, /Ana Souza/);
+      assert.doesNotMatch(output, /ana\.souza/);
+      assert.match(output, /\[PII:name:[0-9a-f]{8}\]/);
+      assert.match(output, /\[PII:email:[0-9a-f]{8}@gmail\.com\]/);
+      assert.match(output, /\[PII-HYGIENE db-query\].*aggregate in the query/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("reading source code leaves field names and types alone, and only a literal mailbox is pseudonymised", async () => {
+  const root = tempRoot();
+  try {
+    const source = `type User = { name: string; email: string };\nconst admin = "${PII_MAIL}";`;
+    const outcome = await runHandler(
+      toolAfterHandler,
+      stdinOf(
+        claudeToolAfter(root, {
+          tool_name: "Read",
+          tool_input: { file_path: join(root, "src/user.ts") },
+          tool_response: source,
+        }),
+      ),
+    );
+    const output =
+      outcome.decision.kind === "rewriteOutput"
+        ? `${outcome.decision.output}\n${outcome.decision.notice ?? ""}`
+        : "";
+    assert.match(output, /type User = \{ name: string; email: string \};/);
+    assert.match(output, /\[PII:email:[0-9a-f]{8}@gmail\.com\]/);
+    assert.match(output, /\[PII-HYGIENE source-file\]/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a secret and personal data in one output are both masked, each with its own advice", async () => {
+  const root = tempRoot();
+  try {
+    const output = `db_password=fixture-db-pass user=${PII_MAIL}`;
+    const outcome = await runHandler(
+      toolAfterHandler,
+      stdinOf(
+        claudeToolAfter(root, {
+          tool_name: "Bash",
+          tool_input: { command: "tail logs/app.log" },
+          tool_response: output,
+        }),
+      ),
+    );
+    const masked =
+      outcome.decision.kind === "rewriteOutput"
+        ? `${outcome.decision.output}\n${outcome.decision.notice ?? ""}`
+        : "";
+    assert.match(masked, /\[REDACTED:password-assignment:/);
+    assert.match(masked, /\[PII:email:/);
+    assert.match(masked, /\[SECRET-HYGIENE logged-credential\]/);
+    assert.match(masked, /\[PII-HYGIENE log\]/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pii.redactOutput false leaves personal data as it is", async () => {
+  const root = tempRoot();
+  try {
+    mkdirSync(join(root, ".tlc", "harness"), { recursive: true });
+    writeFileSync(
+      join(root, ".tlc", "harness", "config.json"),
+      JSON.stringify({ version: 1, pii: { redactOutput: false } }),
+    );
+    const outcome = await runHandler(
+      toolAfterHandler,
+      stdinOf(
+        claudeToolAfter(root, {
+          tool_name: "Bash",
+          tool_input: { command: "psql" },
+          tool_response: psqlRows(),
+        }),
+      ),
+    );
+    assert.equal(outcome.decision.kind, "abstain");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// hazard: the audit kept what the model never saw — a record on disk is the copy that outlives the session.
+test("the audit record on disk carries no personal value", async () => {
+  const root = tempRoot();
+  try {
+    await runHandler(
+      toolAfterHandler,
+      stdinOf(
+        claudeToolAfter(root, {
+          tool_name: "Bash",
+          tool_input: { command: "psql" },
+          tool_response: psqlRows(),
+        }),
+      ),
+    );
+    const audit = readFileSync(join(projectStateDir(root), "audit.jsonl"), "utf8");
+    assert.doesNotMatch(audit, /Ana Souza/);
+    assert.doesNotMatch(audit, /ana\.souza/);
+    assert.match(audit, /\[PII:name\]/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

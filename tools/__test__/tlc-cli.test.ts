@@ -1133,6 +1133,8 @@ describe("wireRuntime", () => {
     mkdirSync(join(dest, "skills", "harness-init"), { recursive: true });
     mkdirSync(join(dest, "bin"), { recursive: true });
     writeFileSync(join(dest, "skills", "harness-init", "SKILL.md"), "# harness-init\n");
+    mkdirSync(join(dest, "skills", "harness-pii"), { recursive: true });
+    writeFileSync(join(dest, "skills", "harness-pii", "SKILL.md"), "# harness-pii\n");
     writeFileSync(join(dest, "config.example.json"), '{"version":1}');
     return dest;
   }
@@ -1151,7 +1153,14 @@ describe("wireRuntime", () => {
     }
     // invariant: never the layout the PowerShell installer wrote, which no provider reads.
     assert.equal(existsSync(join(scratch, ".tlc", "skills", "harness-init")), false);
-    assert.equal(result.missingSkill, false);
+    assert.equal(
+      readFileSync(
+        join(process.env.CLAUDE_CONFIG_DIR as string, "skills", "harness-pii", "SKILL.md"),
+        "utf8",
+      ),
+      "# harness-pii\n",
+    );
+    assert.equal(result.missingSkill, null);
   });
 
   test("AC6 a provider that is not installed is skipped, not created", () => {
@@ -1189,7 +1198,7 @@ describe("wireRuntime", () => {
     const dest = join(scratch, "empty");
     mkdirSync(dest, { recursive: true });
 
-    assert.equal(wireRuntime(dest, dest).missingSkill, true);
+    assert.equal(wireRuntime(dest, dest).missingSkill, join(dest, "skills", "harness-init"));
   });
 });
 

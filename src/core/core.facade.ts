@@ -131,6 +131,18 @@ import {
   shouldObserve,
   unobservableRails,
 } from "./observe/observe.service.ts";
+import { piiAdvice } from "./pii-scan/pii-scan.advice.ts";
+import {
+  describeUncovered,
+  uncoveredFields,
+  uncoveredFollowup,
+  uncoveredInAdded,
+} from "./pii-scan/pii-scan.coverage.ts";
+import { scanForPii } from "./pii-scan/pii-scan.service.ts";
+import { classifyPiiSource } from "./pii-scan/pii-scan.source.ts";
+import { pseudonymFor, sessionPseudonyms } from "./pii-scan/pii-scan.store.ts";
+import { loadPiiTemplate, loadPiiTemplateFor } from "./pii-scan/pii-scan.template.ts";
+import { findAddedPii, writtenPiiFollowup } from "./pii-scan/pii-scan.written.ts";
 import { detectDeviations, detectPlan } from "./plan/plan.detect.ts";
 import { evaluatePlanGate, planVerdict } from "./plan/plan.service.ts";
 import { DEFAULTS } from "./policy/policy.defaults.ts";
@@ -216,7 +228,7 @@ import {
   recentShipClaimActive,
   touchesRuntime,
 } from "./ship/ship.service.ts";
-import { linkHealth, linkHealthMessage, skillLinks } from "./skill/skill.link.ts";
+import { linkHealth, linkHealthMessage, SKILL_NAMES, skillLinks } from "./skill/skill.link.ts";
 import {
   recordResolution,
   resolutionFor,
@@ -365,6 +377,7 @@ export const coreFacade = {
     linkHealth,
     linkHealthMessage,
     skillLinks,
+    names: SKILL_NAMES,
   },
   lesson: {
     projectLessonsInjectable,
@@ -570,6 +583,21 @@ export const coreFacade = {
     classifyLeak,
     leakAdvice,
     adviseOnce,
+  },
+  piiScan: {
+    loadPiiTemplate,
+    loadPiiTemplateFor,
+    scanForPii,
+    classifyPiiSource,
+    pseudonymFor,
+    sessionPseudonyms,
+    piiAdvice,
+    findAddedPii,
+    writtenPiiFollowup,
+    uncoveredFields,
+    uncoveredInAdded,
+    uncoveredFollowup,
+    describeUncovered,
   },
   observe: {
     shouldObserve,

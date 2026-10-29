@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { join, sep } from "node:path";
 import { describe, test } from "node:test";
-import { linkHealth, linkHealthMessage, SKILL_NAME, skillLinks } from "../skill.link.ts";
+import { linkHealth, linkHealthMessage, SKILL_NAME, SKILL_NAMES, skillLinks } from "../skill.link.ts";
 
 const HOME = "/opt/tlc/harness";
 
@@ -12,7 +12,7 @@ describe("skillLinks", () => {
    * provider reads only its own skills directory.
    */
   test("AC every present provider directory gets its own link, under that provider", () => {
-    const links = skillLinks(HOME, ["/cfg/editor-a", "/cfg/editor-b"], () => true);
+    const links = skillLinks(HOME, ["/cfg/editor-a", "/cfg/editor-b"], () => true, [SKILL_NAME]);
 
     assert.deepEqual(
       links.map((link) => link.target),
@@ -21,14 +21,16 @@ describe("skillLinks", () => {
   });
 
   test("AC every link points at the skill inside the runtime home", () => {
-    for (const link of skillLinks(HOME, ["/cfg/editor-a", "/cfg/editor-b"], () => true)) {
+    for (const link of skillLinks(HOME, ["/cfg/editor-a", "/cfg/editor-b"], () => true, [SKILL_NAME])) {
       assert.equal(link.source, `${HOME}/skills/${SKILL_NAME}`);
     }
   });
 
   /** invariant: a provider that is not installed gets nothing — linking into a directory nobody created is litter. */
   test("a provider directory that does not exist is skipped", () => {
-    const links = skillLinks(HOME, ["/cfg/editor-a", "/cfg/editor-b"], (path) => path === "/cfg/editor-a");
+    const links = skillLinks(HOME, ["/cfg/editor-a", "/cfg/editor-b"], (path) => path === "/cfg/editor-a", [
+      SKILL_NAME,
+    ]);
 
     assert.equal(links.length, 1);
     assert.equal(links[0]?.providerDir, "/cfg/editor-a");
@@ -39,6 +41,16 @@ describe("skillLinks", () => {
       skillLinks(HOME, ["/cfg/editor-a"], () => false),
       [],
     );
+  });
+
+  test("every shipped skill is linked into every present provider, each from its own runtime directory", () => {
+    const links = skillLinks(HOME, ["/cfg/editor-a"], () => true);
+
+    assert.deepEqual(
+      links.map((link) => [link.source, link.target]),
+      SKILL_NAMES.map((name) => [`${HOME}/skills/${name}`, `/cfg/editor-a/skills/${name}`]),
+    );
+    assert.ok(SKILL_NAMES.includes("harness-pii"));
   });
 
   /** why: a relocated config directory is the supported case, and this repository is installed under one. */

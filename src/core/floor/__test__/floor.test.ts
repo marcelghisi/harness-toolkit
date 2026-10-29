@@ -578,3 +578,8 @@ test("a command whose job is to print a stored secret is refused; its harmless s
     assertAllowed(command);
   }
 });
+
+// hazard: with the salt, a pseudonym could be reversed by hashing a list of known values.
+test("the personal-data salt is a secret: reading it is refused", () => {
+  assertDenied(`cat ${join(HOME, ".tlc", "harness", "state", "pii-salt")}`, "secret-access");
+});

@@ -94,6 +94,10 @@ export const DEFAULTS: Policy = {
     redactOutput: true,
     knownValues: true,
   },
+  pii: {
+    redactOutput: true,
+    blockWrites: true,
+  },
   intelligence: {
     gapFeedback: true,
     failureClassification: true,

@@ -1,5 +1,5 @@
 import type { Decision, HarnessEvent } from "../contracts/index.ts";
-import { coreFacade } from "../core/index.ts";
+import { coreFacade, type Policy } from "../core/index.ts";
 import { projectStateDir } from "../platform/paths.ts";
 import type { Handler, HandlerContext } from "./run.ts";
 import { main } from "./run.ts";
@@ -149,7 +149,10 @@ export const sessionStartHandler: Handler = async (
       : "Grind OFF (default).",
   );
 
+  lines.push(...piiLines(policy));
+
   const text = lines.join("\n");
+  recordPiiDisabled(root, policy, event);
   // why: the harness injects prose on every session and had never told the operator what it costs. Rails are not
   // free — they are paid in input tokens, on every turn, forever — and a cost nobody can see is a cost nobody
   // weighs ([/decisions/ad-027.md](/decisions/ad-027.md)).
@@ -169,6 +172,29 @@ export const sessionStartHandler: Handler = async (
 
   return { kind: "context", text, env: { HARNESS_ACTIVE: "1" } };
 };
+
+// why: one line, so the agent learns the rule before its first query instead of from its first masked result.
+function piiLines(policy: Policy): string[] {
+  if (!policy.pii.redactOutput && !policy.pii.blockWrites) {
+    return [];
+  }
+  return [
+    "Personal data: query and API results reach you pseudonymised ([PII:<kind>:<id>], stable, so joins still work); aggregate in the query or a script instead of reading rows. Never write personal data into code, comments, config or logs — use fixtures.",
+  ];
+}
+
+// why: turning the protection off is an operator decision, and one an auditor should be able to see was made.
+function recordPiiDisabled(root: string, policy: Policy, event: HarnessEvent): void {
+  if (policy.pii.redactOutput && policy.pii.blockWrites) {
+    return;
+  }
+  coreFacade.observability.recordObs(root, obsConfigFor(policy), {
+    provider: event.provider,
+    kind: "pii.disabled",
+    sessionKey: event.sessionKey,
+    attrs: { redact_output: policy.pii.redactOutput, block_writes: policy.pii.blockWrites },
+  });
+}
 
 if (import.meta.main) {
   await main(sessionStartHandler);

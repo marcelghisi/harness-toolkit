@@ -12,6 +12,7 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { NPM_MARKER, NPM_PACKAGE } from "../bin/tlc-cli.ts";
+import { SKILL_NAMES } from "../src/core/skill/skill.link.ts";
 import {
   claudeConfigDir,
   cursorConfigDir,
@@ -72,8 +73,10 @@ export function uninstallTargets(env: NodeJS.ProcessEnv = process.env): Uninstal
     claudeSettings: join(claudeConfigDir(), "settings.json"),
     cursorHooks: join(cursorConfigDir(), "hooks.json"),
     skillLinks: [
-      join(claudeConfigDir(), "skills", "harness-init"),
-      join(cursorConfigDir(), "skills", "harness-init"),
+      ...SKILL_NAMES.flatMap((skill) => [
+        join(claudeConfigDir(), "skills", skill),
+        join(cursorConfigDir(), "skills", skill),
+      ]),
       // the layout the PowerShell installer wrote: one junction no provider ever read
       join(userHome, ".tlc", "skills", "harness-init"),
     ],
