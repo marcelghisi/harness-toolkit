@@ -25,7 +25,7 @@ export function isSchemaFile(path: string): boolean {
     extension === ".gql" ||
     /^(openapi|swagger)[\w.-]*\.(ya?ml|json)$/.test(name) ||
     /^(template|serverless)\.ya?ml$/.test(name) ||
-    /(schema|model|entity|types?|dto)s?\.(ts|js|py)$/.test(name) ||
+    /(schema|model|entity|types?|dto)s?\.([mc]?[jt]s|py)$/.test(name) ||
     /(^|\/)(migrations?|models?|entities|schemas?)\//.test(path.toLowerCase())
   );
 }

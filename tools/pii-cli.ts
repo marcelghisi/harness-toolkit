@@ -5,7 +5,7 @@ import { classifyPiiSource } from "../src/core/pii-scan/pii-scan.source.ts";
 import { isSchemaFile, type SchemaFile, suggestPiiTemplate } from "../src/core/pii-scan/pii-scan.suggest.ts";
 import { loadPiiTemplate } from "../src/core/pii-scan/pii-scan.template.ts";
 import { emitJson, takeJsonFlag } from "../src/platform/cli-output.ts";
-import { listTrackedFiles } from "../src/platform/git.ts";
+import { listProjectFiles } from "../src/platform/git.ts";
 import { piiTemplatePath } from "../src/platform/paths.ts";
 import { readStdinText } from "../src/platform/process.ts";
 
@@ -30,14 +30,23 @@ function readSchemas(root: string, paths: readonly string[]): SchemaFile[] {
 }
 
 async function suggest(root: string, json: boolean): Promise<void> {
-  const paths = await listTrackedFiles(root);
-  const suggestion = suggestPiiTemplate(readSchemas(root, paths), paths);
+  const paths = await listProjectFiles(root);
+  const schemas = readSchemas(root, paths);
+  const suggestion = suggestPiiTemplate(schemas, paths);
   if (json) {
     emitJson(suggestion);
     return;
   }
   console.log(`# Proposed ${piiTemplatePath(root)} — review, edit, and save it yourself.`);
   console.log(JSON.stringify(suggestion.template, null, 2));
+  // why: an empty proposal with no reason reads as "this project holds no personal data", which is never what it means.
+  if (schemas.length === 0) {
+    console.log(
+      "\n# No schema file found (SQL, Prisma, GraphQL, OpenAPI, *schema*/*model*/*types* sources, migrations/).\n" +
+        "  Only the default packs are proposed — list the personal fields yourself under `fields`.",
+    );
+    return;
+  }
   console.log("\n# Evidence");
   for (const item of suggestion.evidence) {
     const where = item.files.length > 0 ? ` — ${item.files.join(", ")}` : "";

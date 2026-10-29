@@ -7,6 +7,8 @@ test("schema files are read, data and dependencies are not", () => {
     "db/migrations/001_users.sql",
     "prisma/schema.prisma",
     "src/user.schema.ts",
+    "src/schema.mjs",
+    "src/models.cts",
     "openapi.yaml",
   ]) {
     assert.equal(isSchemaFile(path), true, path);

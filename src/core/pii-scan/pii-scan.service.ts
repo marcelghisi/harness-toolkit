@@ -54,9 +54,23 @@ function isFixtureEmail(value: string, template: CompiledPiiTemplate): boolean {
 const CODE_VALUE =
   /^(?:[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)+|.*[()=>{}].*|string|number|boolean|bigint|any|unknown|never|Date|String|Number|Boolean|true|false)$/;
 
-function isFixtureValue(kind: string, value: string, template: CompiledPiiTemplate): boolean {
+// why: `"name": "pii-masking-demo"` in a manifest and `{ "name": "password" }` in a descriptor name a package, a
+// resource or a field. A person's name has a space or a capital; an identifier has neither, or has a separator.
+const SEPARATED_IDENTIFIER = /^@?[a-z0-9]+(?:[-_./@:][a-z0-9]+)+$/;
+const LOWER_WORD = /^[a-z][a-z0-9]*$/;
+
+// hazard: a store that lower-cases a single first name under a bare `name` column now reads it in the clear. The
+// labelled columns (`first_name`, `full_name`, `nome`) are not relaxed, and a capitalised value is still masked.
+function isIdentifierName(label: string, value: string): boolean {
+  return SEPARATED_IDENTIFIER.test(value) || (normalizeLabel(label) === "name" && LOWER_WORD.test(value));
+}
+
+function isFixtureValue(kind: string, value: string, template: CompiledPiiTemplate, label = ""): boolean {
   const trimmed = value.trim();
   if (PLACEHOLDER.test(trimmed) || CODE_VALUE.test(trimmed)) {
+    return true;
+  }
+  if (kind === "name" && isIdentifierName(label, trimmed)) {
     return true;
   }
   if (trimmed.includes("@") && isFixtureEmail(trimmed, template)) {
@@ -115,8 +129,8 @@ const COLON_FIELD = /(?<![\w"'/])([A-Za-z_][\w.-]{0,63}):[ \t]*(?:"([^"\n]*)"|'(
 
 function labelledFieldMatches(text: string, template: CompiledPiiTemplate): PiiMatch[] {
   const out: PiiMatch[] = [];
-  const push = (rule: LabelRule, value: string, start: number): void => {
-    if (value.trim() !== "" && !isFixtureValue(rule.kind, value, template)) {
+  const push = (rule: LabelRule, label: string, value: string, start: number): void => {
+    if (value.trim() !== "" && !isFixtureValue(rule.kind, value, template, label)) {
       out.push({ start, end: start + value.length, kind: rule.kind, mode: rule.mode });
     }
   };
@@ -124,14 +138,14 @@ function labelledFieldMatches(text: string, template: CompiledPiiTemplate): PiiM
     const rule = labelFor(match[1] ?? "", template);
     const value = match[2] ?? match[3];
     if (rule && value !== undefined && match.index !== undefined) {
-      push(rule, value, match.index + match[0].lastIndexOf(value));
+      push(rule, match[1] ?? "", value, match.index + match[0].lastIndexOf(value));
     }
   }
   for (const match of [...text.matchAll(EQUALS_FIELD), ...text.matchAll(COLON_FIELD)]) {
     const rule = labelFor(match[1] ?? "", template);
     const value = (match[2] ?? match[3] ?? match[4] ?? "").trimEnd();
     if (rule && match.index !== undefined) {
-      push(rule, value, match.index + match[0].lastIndexOf(value));
+      push(rule, match[1] ?? "", value, match.index + match[0].lastIndexOf(value));
     }
   }
   return out;
@@ -285,7 +299,8 @@ function tableMatches(text: string, template: CompiledPiiTemplate): PiiMatch[] {
     for (const row of found.table.rows) {
       row.forEach((cell, column) => {
         const rule = rules[column];
-        if (rule && cell.text !== "" && !isFixtureValue(rule.kind, cell.text, template)) {
+        const label = found.table.header[column]?.text ?? "";
+        if (rule && cell.text !== "" && !isFixtureValue(rule.kind, cell.text, template, label)) {
           out.push({ start: cell.start, end: cell.end, kind: rule.kind, mode: rule.mode });
         }
       });

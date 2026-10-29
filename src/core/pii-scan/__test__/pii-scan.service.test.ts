@@ -76,6 +76,16 @@ test("code that names a field is not personal data: an expression or a type stay
   assert.deepEqual(found("name: getName(user)"), []);
 });
 
+// why: the demo project's own package.json and PII template came back with their names pseudonymised.
+test("a name that is an identifier — a package, a resource, a field — is not a person", () => {
+  assert.deepEqual(found('{"name": "pii-masking-demo", "version": "1.0.0"}'), []);
+  assert.deepEqual(found('{"name": "@scope/pkg"}'), []);
+  assert.deepEqual(found('[{ "name": "password", "kind": "credential" }, { "name": "last_login_ip" }]'), []);
+  assert.deepEqual(found("id,name\n1,worker-01"), []);
+  assert.deepEqual(found('{"name": "Ana"}'), [["name", "Ana"]]);
+  assert.deepEqual(found('{"full_name": "ana"}'), [["name", "ana"]]);
+});
+
 test("with fields off, as for a source file, only self-proving shapes are found", () => {
   const mail = email("ana", "corp-fixture.io");
   assert.deepEqual(found(`const seed = { name: "Ana Souza", email: "${mail}" }`, DEFAULT, false), [

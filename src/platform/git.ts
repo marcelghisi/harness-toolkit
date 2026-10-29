@@ -419,6 +419,20 @@ export async function listTrackedFiles(projectDir: string): Promise<string[]> {
   return gitPaths(root, ["ls-files", "-z"]);
 }
 
+/**
+ * Every file the project owns, tracked or not yet added, still honouring `.gitignore`.
+ *
+ * why: a schema written before the first `git add` is still the project's schema — reading only the tracked files
+ * made `pii suggest` propose an empty template for a repository that had just been initialised.
+ */
+export async function listProjectFiles(projectDir: string): Promise<string[]> {
+  const root = await gitRootOf(projectDir);
+  if (root === null) {
+    return [];
+  }
+  return gitPaths(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
+}
+
 export type RepoRef = { owner: string; repo: string };
 
 /**
