@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { describeUncovered, uncoveredFields } from "../src/core/pii-scan/pii-scan.coverage.ts";
 import { scanForPii } from "../src/core/pii-scan/pii-scan.service.ts";
 import { classifyPiiSource } from "../src/core/pii-scan/pii-scan.source.ts";
 import {
@@ -16,18 +17,20 @@ import {
   type PiiTemplateFile,
 } from "../src/core/pii-scan/pii-scan.template.ts";
 import { emitJson, takeJsonFlag } from "../src/platform/cli-output.ts";
-import { listProjectFiles } from "../src/platform/git.ts";
+import { gitHooksDir, listProjectFiles, listStagedFiles } from "../src/platform/git.ts";
 import { piiTemplatePath } from "../src/platform/paths.ts";
 import { readStdinText } from "../src/platform/process.ts";
 
 function usage(): void {
-  console.log("usage: tlc harness pii suggest [--candidates <file|->] | test <file|-> | apply <file>");
+  console.log(
+    "usage: tlc harness pii suggest [--candidates <file|->] | check [--staged] | hook | test <file|-> | apply <file>",
+  );
 }
 
 // why: a schema file over this size is a data dump, not a schema, and reading it would be reading the data.
 const MAX_SCHEMA_BYTES = 512 * 1024;
 
-function readSchemas(root: string, paths: readonly string[]): SchemaFile[] {
+export function readSchemas(root: string, paths: readonly string[]): SchemaFile[] {
   const files: SchemaFile[] = [];
   for (const path of paths.filter(isSchemaCandidate)) {
     try {
@@ -147,7 +150,7 @@ async function testText(root: string, target: string | undefined, json: boolean)
   console.log(`${located.length} value(s) would be pseudonymised; none are printed.`);
 }
 
-const TEMPLATE_KEYS = new Set(["$schema", "extends", "fields", "patterns", "fixtures", "keep"]);
+const TEMPLATE_KEYS = new Set(["$schema", "extends", "fields", "patterns", "fixtures", "keep", "ignore"]);
 
 export type ApplyPlan =
   | { ok: false; errors: string[] }
@@ -271,6 +274,84 @@ async function apply(root: string, source: string | undefined): Promise<void> {
   );
 }
 
+/**
+ * why a non-zero exit: this is what a pre-commit hook and a CI step run, and a column that looks personal reaching
+ * the main branch without a template entry is the moment its values start reaching the model unmasked.
+ */
+async function check(root: string, json: boolean, staged: boolean): Promise<void> {
+  const paths = staged ? await listStagedFiles(root) : await listProjectFiles(root);
+  const template = loadPiiTemplate(root);
+  const found = uncoveredFields(readSchemas(root, paths), template);
+  if (json) {
+    emitJson({ template: template.source, staged, uncovered: found });
+  } else if (found.length === 0) {
+    console.log(`pii check: every personal-looking schema field is covered (${template.source} template).`);
+  } else {
+    console.log(`pii check: ${found.length} schema field(s) look personal and are not in the PII template:`);
+    for (const field of found) {
+      console.log(`  ${describeUncovered(field)}`);
+    }
+    console.log(
+      "\nAsk the agent for the harness-pii skill to propose the update, then install it with `tlc harness pii apply <file>`.",
+    );
+  }
+  if (found.length > 0) {
+    process.exit(1);
+  }
+}
+
+const HOOK_MARKER = "# tlc-harness:pii-check";
+
+// why the fallback: a commit made from an IDE or a GUI client often runs with a PATH that has no `tlc` on it, and
+// the launcher always sits in the runtime home.
+export const HOOK_BLOCK = [
+  HOOK_MARKER,
+  "# Installed by `tlc harness pii hook`. Delete these lines to stop checking new personal-data fields.",
+  'tlc_bin=$(command -v tlc || echo "$HOME/.tlc/harness/bin/tlc")',
+  '"$tlc_bin" harness pii check --staged || exit 1',
+].join("\n");
+
+export type HookPlan = { action: "create"; content: string } | { action: "present" } | { action: "manual" };
+
+/**
+ * invariant: an existing hook that is not this one is never edited. It may end in `exec`, belong to a hook
+ * manager, or be generated — so the operator is shown the lines to add instead.
+ */
+export function planHook(existing: string | null): HookPlan {
+  if (existing === null) {
+    return { action: "create", content: `#!/bin/sh\n${HOOK_BLOCK}\n` };
+  }
+  return existing.includes(HOOK_MARKER) ? { action: "present" } : { action: "manual" };
+}
+
+async function hook(root: string): Promise<void> {
+  const dir = await gitHooksDir(root);
+  if (dir === null) {
+    console.error("pii hook: not a git repository.");
+    process.exit(1);
+  }
+  const target = join(dir, "pre-commit");
+  const plan = planHook(existsSync(target) ? readFileSync(target, "utf8") : null);
+  if (plan.action === "present") {
+    console.log(`pii hook: already installed in ${target}.`);
+    return;
+  }
+  if (plan.action === "manual") {
+    console.log(`pii hook: ${target} already exists and is not this harness's, so it was left alone.`);
+    console.log(
+      "Add these lines to it, or to your hook manager's pre-commit step (husky, lefthook, pre-commit):\n",
+    );
+    console.log(HOOK_BLOCK);
+    return;
+  }
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(target, plan.content);
+  chmodSync(target, 0o755);
+  console.log(
+    `pii hook: installed ${target} — a commit whose schema adds an uncovered personal field now fails.`,
+  );
+}
+
 async function main(argv: string[]): Promise<void> {
   const { json, rest: afterJson } = takeJsonFlag(argv);
   const { value: candidatesFrom, rest } = takeOption(afterJson, "--candidates");
@@ -278,6 +359,14 @@ async function main(argv: string[]): Promise<void> {
   const [cmd, target] = rest;
   if (cmd === "suggest") {
     await suggest(root, json, candidatesFrom);
+    return;
+  }
+  if (cmd === "check") {
+    await check(root, json, rest.includes("--staged"));
+    return;
+  }
+  if (cmd === "hook") {
+    await hook(root);
     return;
   }
   if (cmd === "apply") {

@@ -28,6 +28,8 @@ test("HTTP clients, log readers and data files are told apart", () => {
     ["cat exports/users.csv", "data-file"],
     ["head config/app.yaml", "config-file"],
     ["ls -la", "other"],
+    ["cd repo && git switch -q x && cat src/a.ts; grep -n name tools/doctor.ts", "source-file"],
+    ["cat src/seed.ts fixtures/users.csv", "data-file"],
   ];
   for (const [command, source] of cases) {
     assert.equal(classifyPiiSource({ command }), source, command);

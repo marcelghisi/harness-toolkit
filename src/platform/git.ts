@@ -433,6 +433,32 @@ export async function listProjectFiles(projectDir: string): Promise<string[]> {
   return gitPaths(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
 }
 
+/** The files a commit in progress adds or changes — what a pre-commit hook is asked about. */
+export async function listStagedFiles(projectDir: string): Promise<string[]> {
+  const root = await gitRootOf(projectDir);
+  if (root === null) {
+    return [];
+  }
+  return gitPaths(root, ["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"]);
+}
+
+/**
+ * Where this repository's hooks live.
+ *
+ * why asked of git: `core.hooksPath` (husky sets it) and a linked worktree both move the directory, and a hook
+ * written to `.git/hooks` there is one git never runs.
+ */
+export async function gitHooksDir(projectDir: string): Promise<string | null> {
+  let result: { exitCode: number; stdout: string };
+  try {
+    result = await runProcess({ command: ["git", "rev-parse", "--git-path", "hooks"], cwd: projectDir });
+  } catch {
+    return null;
+  }
+  const raw = result.stdout.trim();
+  return result.exitCode === 0 && raw.length > 0 ? resolve(projectDir, raw) : null;
+}
+
 export type RepoRef = { owner: string; repo: string };
 
 /**

@@ -106,10 +106,11 @@ function commandSource(command: string): PiiSource | null {
     return "log";
   }
   // why: `cat users.csv` or `head config.yaml` read a file through the shell, so the file decides the source.
-  const named = words
-    .map((word) => fileSource(word))
-    .find((source) => source !== "other" && source !== "source-file");
-  return named ?? null;
+  const sources = words.map((word) => fileSource(word));
+  const named = sources.find((source) => source !== "other" && source !== "source-file");
+  // why: `grep -n name src/doctor.ts` prints code, and a field label in code names a variable — measured, it
+  // pseudonymised `name: "pii template"` in the harness's own source. A data or config operand still wins.
+  return named ?? (sources.includes("source-file") ? "source-file" : null);
 }
 
 function fileSource(filePath: string): PiiSource {

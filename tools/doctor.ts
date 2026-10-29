@@ -7,7 +7,9 @@ import { findBunOnPath, writeRuntimeCache } from "../bin/tlc-exec.mjs";
 import { isCursorWired } from "../bin/write-user-hooks.mjs";
 import type { ProviderWiring } from "../src/contracts/index.ts";
 import { coreFacade } from "../src/core/index.ts";
+import type { SchemaFile } from "../src/core/pii-scan/pii-scan.suggest.ts";
 import { emitJson, takeJsonFlag } from "../src/platform/cli-output.ts";
+import { listProjectFiles } from "../src/platform/git.ts";
 import {
   executableOnPath,
   launcherBinDir,
@@ -26,6 +28,7 @@ import {
 } from "../src/providers/cursor/cursor.wiring.ts";
 import { providers } from "../src/providers/index.ts";
 import type { ProviderPort } from "../src/providers/provider.port.ts";
+import { readSchemas } from "./pii-cli.ts";
 
 export type CheckLevel = "ok" | "warn" | "fail";
 
@@ -295,7 +298,7 @@ export function checkRules(root: string): Check[] {
  * why a row: the personal-data template is the project's definition of what to protect, and a typo in it (an unknown
  * pack, a regex that does not compile) silently protects less. The hook never fails on it, so doctor is where it shows.
  */
-export function checkPiiTemplate(root: string): Check[] {
+export function checkPiiTemplate(root: string, schemas: readonly SchemaFile[] | null = null): Check[] {
   const policy = coreFacade.policy.loadPolicy(root);
   if (!policy.pii.redactOutput && !policy.pii.blockWrites) {
     return [
@@ -320,6 +323,20 @@ export function checkPiiTemplate(root: string): Check[] {
       level: "warn",
       name: "pii template",
       detail: `${error} — the rest of the template still applies`,
+    });
+  }
+  if (schemas !== null) {
+    const uncovered = coreFacade.piiScan.uncoveredFields(schemas, template);
+    checks.push({
+      level: uncovered.length > 0 ? "warn" : "ok",
+      name: "pii coverage",
+      detail:
+        uncovered.length > 0
+          ? `${uncovered.length} schema field(s) look personal and are not covered (${uncovered
+              .slice(0, 5)
+              .map((field) => field.field)
+              .join(", ")}${uncovered.length > 5 ? ", …" : ""}) — \`tlc harness pii check\` lists them`
+          : `every personal-looking field in ${schemas.length} schema file(s) is covered`,
     });
   }
   return checks;
@@ -869,6 +886,8 @@ export type DoctorContext = {
   nodeVersion: string;
   bunPath: string | null;
   registry: readonly ProviderPort[];
+  /** why optional: listing the project's files is a git call, so a context built for a test leaves it out. */
+  schemas?: readonly SchemaFile[] | null;
 };
 
 export function runChecks(ctx: DoctorContext): Check[] {
@@ -882,7 +901,7 @@ export function runChecks(ctx: DoctorContext): Check[] {
     ...checkCapabilities(ctx.root, ctx.runtimeHome),
     ...checkPrices(),
     ...checkRules(ctx.root),
-    ...checkPiiTemplate(ctx.root),
+    ...checkPiiTemplate(ctx.root, ctx.schemas ?? null),
     checkGlobalCommands(ctx.home),
   ];
 }
@@ -978,7 +997,11 @@ function realContext(): DoctorContext {
 
 if (import.meta.main) {
   const { json } = takeJsonFlag(process.argv.slice(2));
-  const checks = runChecks(realContext());
+  const context = realContext();
+  const checks = runChecks({
+    ...context,
+    schemas: readSchemas(context.root, await listProjectFiles(context.root)),
+  });
   if (json) {
     emitJson(toReport(checks));
   } else {

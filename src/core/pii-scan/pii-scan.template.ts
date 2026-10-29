@@ -24,6 +24,13 @@ export type CompiledPiiTemplate = {
   fixtureDomains: string[];
   fixturePaths: string[];
   keep: Set<KeepAttribute>;
+  /**
+   * Field names the operator reviewed and decided are not personal.
+   *
+   * invariant: only the coverage check reads this. It silences "this new field looks personal" and never unmasks a
+   * value — a label a pack covers is still masked even when it is listed here.
+   */
+  ignore: Set<string>;
   /** why: a broken template is reported by `doctor` and never takes a hook down — the defaults still apply. */
   errors: string[];
 };
@@ -37,6 +44,7 @@ export type PiiTemplateFile = {
   patterns?: PatternEntry[];
   fixtures?: { domains?: string[]; paths?: string[] };
   keep?: string[];
+  ignore?: string[];
 };
 
 /**
@@ -135,6 +143,7 @@ export function compilePiiTemplate(file: PiiTemplateFile | null, errors: string[
     fixtureDomains: (file?.fixtures?.domains ?? []).map((domain) => domain.toLowerCase()),
     fixturePaths: file?.fixtures?.paths ?? [],
     keep: compileKeep(file?.keep, errors),
+    ignore: new Set((file?.ignore ?? []).map(normalizeLabel)),
     errors,
   };
   // why: a project's own pattern is the more specific claim, so it runs before the built-in shapes take its digits.

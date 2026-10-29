@@ -903,6 +903,8 @@ MEASURE
 PROJECT
   tlc harness init --minimal | tlc harness init --write --stdin-json
   tlc harness pii suggest [--candidates <file|->]   propose a personal-data template from the schema
+  tlc harness pii check [--staged] fail when a schema field looks personal and the template misses it
+  tlc harness pii hook             install that check as the repository's pre-commit hook
   tlc harness pii test <file|->    what would be pseudonymised, by line and kind
   tlc harness pii apply <file>     validate, show the change, and write the template (operator only)`.split(
           "\n",

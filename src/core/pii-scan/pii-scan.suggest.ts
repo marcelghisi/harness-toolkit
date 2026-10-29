@@ -250,10 +250,14 @@ function componentsOf(captured: string): string[] {
     .filter(Boolean);
 }
 
-function fieldsIn(path: string, text: string): Set<string> {
+/**
+ * The field names a schema file declares — in `scanned` only, with the dialect chosen from the whole file, so a
+ * diff's added lines are read by the patterns their file's ORM marker selects.
+ */
+export function fieldsIn(path: string, text: string, scanned: string = text): Set<string> {
   const out = new Set<string>();
   for (const pattern of schemaPatterns(path, text)) {
-    for (const match of text.matchAll(new RegExp(pattern.source, pattern.flags))) {
+    for (const match of scanned.matchAll(new RegExp(pattern.source, pattern.flags))) {
       for (const name of componentsOf(match[1] ?? "")) {
         out.add(normalizeLabel(name));
       }
@@ -274,10 +278,15 @@ const PERSON_NAME =
 // its users' data are likely to come in.
 const LOCALE = /(^|[/._-])(pt|es|fr|de|it)([-_][A-Za-z]{2})?([/._]|$)/;
 
-function packsFor(field: string): string[] {
+export function packsFor(field: string): string[] {
   return PACKS.filter((pack) => pack.id !== "global" && pack.labels && Object.hasOwn(pack.labels, field)).map(
     (pack) => pack.id,
   );
+}
+
+/** A field name that a pack labels or that ends in a word for personal data. */
+export function looksPersonal(field: string): boolean {
+  return packsFor(field).length > 0 || PERSONAL_TOKENS.test(field) || PERSON_NAME.test(field);
 }
 
 function localePacks(paths: readonly string[]): string[] {

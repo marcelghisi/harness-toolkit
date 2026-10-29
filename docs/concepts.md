@@ -389,7 +389,15 @@ counts only when it carries its ORM's marker, and fixture, seed and data directo
 pattern reads, ask the agent for the `harness-pii` skill: it reads the domain model, passes the fields it judges
 personal to `pii suggest --candidates`, and hands the resulting template to you. `tlc harness pii apply <file>`
 installs it: it compiles the template with the hooks' own compiler, refuses it whole on any error, shows the diff
-and asks. It needs a terminal, and the floor refuses it to the agent. The CLI accepts only names, kinds,
+and asks. It needs a terminal, and the floor refuses it to the agent.
+
+**Keeping it current.** A new column that looks personal and is not in the template is caught three ways:
+`tlc harness pii check` exits non-zero and lists it with the pack or field that would cover it (`--staged` reads
+only the commit in progress, for CI and hooks); `tlc harness pii hook` installs that check as the repository's
+pre-commit hook, leaving any existing hook alone; and a turn whose own additions declare such a field ends with an
+advisory that sends the agent to the `harness-pii` skill. `doctor` shows the count. A field the operator reviewed
+and decided is not personal goes under `ignore` in the template, which quiets the check and never unmasks a value a
+pack still labels. The CLI accepts only names, kinds,
 modes and evidence from that list, so a candidate cannot add a pattern, a pack or a fixture.
 
 **What the model reads.** Each personal value becomes `[PII:<kind>:<id>]`, for example `[PII:email:a1b2c3d4@gmail.com]`

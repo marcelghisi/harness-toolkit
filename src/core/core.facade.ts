@@ -132,6 +132,12 @@ import {
   unobservableRails,
 } from "./observe/observe.service.ts";
 import { piiAdvice } from "./pii-scan/pii-scan.advice.ts";
+import {
+  describeUncovered,
+  uncoveredFields,
+  uncoveredFollowup,
+  uncoveredInAdded,
+} from "./pii-scan/pii-scan.coverage.ts";
 import { scanForPii } from "./pii-scan/pii-scan.service.ts";
 import { classifyPiiSource } from "./pii-scan/pii-scan.source.ts";
 import { pseudonymFor, sessionPseudonyms } from "./pii-scan/pii-scan.store.ts";
@@ -587,6 +593,10 @@ export const coreFacade = {
     piiAdvice,
     findAddedPii,
     writtenPiiFollowup,
+    uncoveredFields,
+    uncoveredInAdded,
+    uncoveredFollowup,
+    describeUncovered,
   },
   observe: {
     shouldObserve,

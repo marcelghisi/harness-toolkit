@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { lineDiff, parseCandidates, planApply } from "../pii-cli.ts";
+import { HOOK_BLOCK, lineDiff, parseCandidates, planApply, planHook } from "../pii-cli.ts";
 
 // invariant: the candidate list is the one input an agent writes, so it carries names and nothing that compiles.
 test("candidates keep a name, a kind, a mode and evidence, and drop everything else", () => {
@@ -52,4 +52,17 @@ test("apply plans the exact file and a line diff against the current template", 
 test("the line diff keeps common lines and marks the rest", () => {
   assert.deepEqual(lineDiff(["a", "b", "c"], ["a", "c", "d"]), ["  a", "- b", "  c", "+ d"]);
   assert.deepEqual(lineDiff([], ["x"]), ["+ x"]);
+});
+
+test("the pre-commit hook is created when absent, recognised when present, and never edited into a foreign hook", () => {
+  const created = planHook(null);
+  assert.equal(created.action, "create");
+  assert.ok(created.action === "create" && created.content.startsWith("#!/bin/sh\n"));
+  assert.ok(created.action === "create" && created.content.includes("harness pii check --staged || exit 1"));
+  assert.deepEqual(planHook(`#!/bin/sh\n${HOOK_BLOCK}\n`), { action: "present" });
+  assert.deepEqual(planHook("#!/bin/sh\nexec npx lint-staged\n"), { action: "manual" });
+});
+
+test("apply accepts the ignore key", () => {
+  assert.equal(planApply(null, JSON.stringify({ extends: ["global"], ignore: ["company_name"] })).ok, true);
 });

@@ -104,10 +104,21 @@ Show the operator:
    - commit `.tlc/harness/pii.json`, so it is reviewed like any other policy;
    - `tlc harness doctor` — the `pii template` row must show no errors;
    - `tlc harness pii test <sample output file>` on a real query result or API response they captured — it prints
-     positions and kinds only, never values — and tell you what was over- or under-masked.
+     positions and kinds only, never values — and tell you what was over- or under-masked;
+   - `tlc harness pii hook` once, so a commit that adds a personal-looking column the template misses fails until
+     the template is updated (or `tlc harness pii check --staged` as a CI step).
+5. what `tlc harness pii check` still reports and the operator decided is **not** personal (a company's name, a
+   file name): propose those under `ignore` in the same template, so the check stops asking. `ignore` never
+   unmasks a value a pack still labels.
 
 If they report a miss or a false positive, adjust the candidates and repeat step 5. Never ask them to paste the
 raw values.
+
+## When a new field arrives
+
+This skill is also what runs when the stop says `[PII-HYGIENE coverage]`, or when the pre-commit hook or
+`tlc harness pii check` fails. Start from the current template (step 1), skip the questions the template already
+answers, and propose only the change: the new fields, or the pack that covers them.
 
 ## Troubleshooting
 

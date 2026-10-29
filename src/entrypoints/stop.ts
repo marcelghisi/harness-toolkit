@@ -890,6 +890,26 @@ export const stopHandler: Handler = async (event: HarnessEvent, ctx: HandlerCont
   }
 
   /**
+   * why advisory and last: a new column that looks personal is a template the operator has not updated yet, not a
+   * defect in the turn — so it never refuses the stop, and it is said only once every gate has passed
+   * ([/decisions/ad-151.md](/decisions/ad-151.md)).
+   */
+  const piiCoverage =
+    policy.pii.redactOutput && changedFiles.length > 0
+      ? coreFacade.piiScan.uncoveredInAdded(
+          await listAddedLines(shaRoot, changedFiles, turnBase),
+          (file) => {
+            try {
+              return readFileSync(join(shaRoot, file), "utf8");
+            } catch {
+              return null;
+            }
+          },
+          coreFacade.piiScan.loadPiiTemplate(root),
+        )
+      : [];
+
+  /**
    * why: the same diff scope the comment gate uses, asking a different question — did this turn write something
    * the project already has? Two copies of a run drift apart, and the second copy is where the drift starts
    * ([/decisions/ad-071.md](/decisions/ad-071.md)).
@@ -1150,6 +1170,9 @@ export const stopHandler: Handler = async (event: HarnessEvent, ctx: HandlerCont
       fingerprint_hits: 0,
     },
   });
+  if (piiCoverage.length > 0) {
+    return { kind: "context", text: coreFacade.piiScan.uncoveredFollowup(piiCoverage) };
+  }
   return { kind: "abstain" };
 };
 

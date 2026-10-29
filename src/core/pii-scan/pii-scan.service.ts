@@ -109,7 +109,7 @@ const PERSONAL_SUFFIXES = new Set([
   "nome_completo",
 ]);
 
-function labelFor(name: string, template: CompiledPiiTemplate): LabelRule | undefined {
+export function labelFor(name: string, template: CompiledPiiTemplate): LabelRule | undefined {
   const key = normalizeLabel(name);
   const exact = template.labels.get(key);
   if (exact) {
